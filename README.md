@@ -19,18 +19,15 @@ the password.
 Releases are available in the `/Distit` directory.
 
 1. **Windows** — unzip and run `Cryptoleaf.exe`:
-   https://codeberg.org/hiltsu/cryptoleaf/src/branch/main/Distit/Cryptoleaf-0.2.1-windows-x64.zip.zip
+   https://github.com/ollavarma-create/cryptoleaf/tree/main/Distit/Cryptoleaf-0.2.1-windows-x64.zip.zip
 2. **Linux (legacy)** — for older systems (gcc10, Python 3.11), use `legacy.AppImage`:
-   https://codeberg.org/hiltsu/cryptoleaf/src/branch/main/Distit/cryptoleaf-legacy.AppImage
+   https://github.com/ollavarma-create/cryptoleaf/tree/main/Distit/cryptoleaf-legacy.AppImage
 3. **Linux (modern)** — for newer systems (gcc14, Python 3.12), use `modern.AppImage`:
-   https://codeberg.org/hiltsu/cryptoleaf/src/branch/main/Distit/cryptoleaf-modern.AppImage
+   https://github.com/ollavarma-create/cryptoleaf/tree/main/Distit/cryptoleaf-modern.AppImage
 
 **Linux notes:**
 - Run `chmod +x` on the downloaded file before launching.
 - If `fuse` and `libfuse2` are not already installed, install them via `apt`/`dnf`.
-
-**Previous version (v0.1.1) with binaries:**
-https://codeberg.org/hiltsu/old_v0.1_steganography_encrypter_decrypter
 
 ---
 
