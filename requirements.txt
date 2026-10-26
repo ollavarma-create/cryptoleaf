@@ -1,0 +1,11 @@
+pillow
+piexif
+pyqt6
+pycryptodome
+numpy
+scipy
+PyWavelets
+pydub
+reedsolo
+soundfile
+pyqt6-sip
