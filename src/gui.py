@@ -51,6 +51,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -66,7 +67,10 @@ from PyQt6.QtWidgets import (
 from .audio_decoder import decode_audio, BadAudioMagicError
 from .audio_encoder import encode_audio, capacity_bits_audio
 from .image_decoder import decode_image, BadMagicError
-from .image_encoder import encode_image, capacity_bits
+from .image_encoder import encode_image, capacity_bits, CapacityError
+from .jpeg_optimizer import optimize_jpeg
+from .jpeg_v03 import required_blocks
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +148,37 @@ class _ImageEncodeWorker(QThread):
         except Exception as exc:
             logger.error("Image encoding failed: %s", exc)
             self.error.emit(str(exc))
+
+
+class _JpegOptimizeWorker(QThread):
+    """Optimize, save and verify a JPEG entirely off the GUI thread."""
+
+    finished = pyqtSignal(object)  # OptimizationResult
+    error = pyqtSignal(str)
+    capacity_error = pyqtSignal(str)
+
+    def __init__(self, cover_path: str, output_path: str,
+                 payload: bytes, password: str) -> None:
+        super().__init__()
+        self._cover_path = cover_path
+        self._output_path = output_path
+        self._payload = payload
+        self._password = password
+
+    def run(self) -> None:
+        try:
+            result = optimize_jpeg(
+                self._cover_path, self._output_path,
+                self._payload, self._password,
+                quality=85, mode="first_success",
+            )
+            self.finished.emit(result)
+        except CapacityError as exc:
+            logger.info("JPEG capacity exceeded: %s", exc)
+            self.capacity_error.emit(str(exc))
+        except Exception as exc:
+            logger.exception("JPEG optimization failed")
+            self.error.emit(f"{type(exc).__name__}: {exc}")
 
 
 class _ImageDecodeWorker(QThread):
@@ -393,8 +428,8 @@ class ImageTab(QWidget):
         form.addRow("Output format:", self._format_combo)
 
         self._jpeg_warning = QLabel(
-            "JPEG-kuva tallennetaan laadulla 85. Käytetään lohkopohjaista "
-            "luminanssimenetelmää joka on optimoitu JPEG-pakkaukselle."
+            "JPEG v0.3: automatic strength optimization (quality 85). "
+            "A password is required; the saved file is verified by decoding."
         )
         self._jpeg_warning.setWordWrap(True)
         self._jpeg_warning.setStyleSheet("color: #b85c00;")
@@ -403,21 +438,8 @@ class ImageTab(QWidget):
 
         right.addLayout(form)
 
-        # Alpha slider (hidden when JPEG is selected – strength is fixed for Method B)
-        alpha_row = QHBoxLayout()
-        self._alpha_lbl = QLabel("Embedding strength:")
-        self._alpha_lbl.setToolTip(_ALPHA_TOOLTIP)
-        alpha_row.addWidget(self._alpha_lbl)
-        self._alpha_slider = QSlider(Qt.Orientation.Horizontal)
-        self._alpha_slider.setRange(1, 50)
-        saved = self._settings.value("image/alpha_int", _SLIDER_DEFAULT, int)
-        self._alpha_slider.setValue(saved)
-        self._alpha_slider.setToolTip(_ALPHA_TOOLTIP)
-        self._alpha_val_label = QLabel(f"{saved * 0.1:.1f}")
-        self._alpha_slider.valueChanged.connect(self._on_alpha_changed)
-        alpha_row.addWidget(self._alpha_slider)
-        alpha_row.addWidget(self._alpha_val_label)
-        right.addLayout(alpha_row)
+        # Image embedding strength is selected automatically for JPEG;
+        # the lossless LSB path does not use alpha.
 
         # Progress bar (indeterminate; hidden when idle)
         self._progress = QProgressBar()
@@ -462,6 +484,10 @@ class ImageTab(QWidget):
         self._file_path = path
         self._settings.setValue("last_dir", str(Path(path).parent))
         self._drop_area.set_filename(Path(path).name)
+        source_fmt = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG",
+                      ".bmp": "BMP", ".webp": "WEBP"}.get(Path(path).suffix.lower())
+        if source_fmt:
+            self._format_combo.setCurrentText(source_fmt)
         self._update_thumbnail(path)
         self._update_capacity(path)
         self._update_exif(path)
@@ -480,19 +506,37 @@ class ImageTab(QWidget):
             self._thumbnail.clear()
             self._thumbnail.setText("Preview unavailable")
 
+    def _jpeg_block_counts(self) -> tuple[int, int]:
+        """Return (required, available) using the v0.3 encoder's exact rules."""
+        with Image.open(self._file_path) as image:
+            width, height = image.size
+        available = (width // 8) * max(0, height // 8 - 1)
+        message_size = len(self._message_edit.toPlainText().encode("utf-8"))
+        return required_blocks(message_size), available
+
     def _update_capacity(self, path: str) -> None:
         try:
             fmt = self._format_combo.currentText()
-            bits = capacity_bits(path, output_format=fmt)
-            # JPEG Method B: 32-byte header overhead (no RS).
-            # Lossless LSB: ~64 bytes (RS-encoded 32-byte header).
-            header_overhead = 32 if fmt == "JPEG" else 64
-            usable = max(0, bits // 8 - header_overhead)
-            self._current_capacity = usable
-            self._capacity_label.setText(f"Capacity: ~{usable:,} bytes available")
+            if fmt == "JPEG":
+                needed, available = self._jpeg_block_counts()
+                self._current_capacity = 0  # JPEG uses blocks, not LSB bytes
+                self._capacity_label.setText(
+                    f"JPEG v0.3: {available:,} blocks available; "
+                    f"{needed:,} required for current message"
+                )
+                self._capacity_label.setStyleSheet(
+                    "color: #b00020;" if needed > available else ""
+                )
+            else:
+                bits = capacity_bits(path, output_format=fmt)
+                usable = max(0, bits // 8 - 64)
+                self._current_capacity = usable
+                self._capacity_label.setText(f"Capacity: ~{usable:,} bytes available")
+                self._capacity_label.setStyleSheet("")
         except Exception as exc:
             self._current_capacity = 0
             self._capacity_label.setText("Capacity: unknown")
+            self._capacity_label.setStyleSheet("")
             logger.warning("Capacity check failed for '%s': %s", path, exc)
         self._update_remaining()
 
@@ -506,6 +550,22 @@ class ImageTab(QWidget):
         used = len(self._message_edit.toPlainText().encode("utf-8"))
         cap = self._current_capacity
         left = cap - used
+        if self._format_combo.currentText() == "JPEG":
+            if self._file_path:
+                try:
+                    needed, available = self._jpeg_block_counts()
+                    self._capacity_label.setText(
+                        f"JPEG v0.3: {available:,} blocks available; "
+                        f"{needed:,} required for current message"
+                    )
+                    self._capacity_label.setStyleSheet(
+                        "color: #b00020;" if needed > available else ""
+                    )
+                except Exception as exc:
+                    logger.warning("JPEG capacity check failed: %s", exc)
+            self._remaining_label.setText(f"Message: {used:,} bytes")
+            self._remaining_label.setStyleSheet("")
+            return
         self._remaining_label.setText(f"{left:,} bytes remaining")
         if cap == 0:
             color = ""
@@ -517,26 +577,14 @@ class ImageTab(QWidget):
             color = "color: #e63946;"
         self._remaining_label.setStyleSheet(color)
 
-    # --- Alpha slider -----------------------------------------------------------
+    # --- Output format -----------------------------------------------------------
 
     def _on_format_changed(self, fmt: str) -> None:
-        is_jpeg = fmt == "JPEG"
-        self._jpeg_warning.setVisible(is_jpeg)
-        # JPEG Method B uses a fixed strength (25); alpha slider has no effect
-        self._alpha_lbl.setVisible(not is_jpeg)
-        self._alpha_slider.setVisible(not is_jpeg)
-        self._alpha_val_label.setVisible(not is_jpeg)
+        self._jpeg_warning.setVisible(fmt == "JPEG")
         if self._file_path:
             self._update_capacity(self._file_path)
         else:
             self._update_remaining()
-
-    def _on_alpha_changed(self, value: int) -> None:
-        self._alpha_val_label.setText(f"{value * 0.1:.1f}")
-        self._settings.setValue("image/alpha_int", value)
-
-    def _alpha_float(self) -> float:
-        return self._alpha_slider.value() * 0.1
 
     # --- Encode / decode actions ------------------------------------------------
 
@@ -550,6 +598,20 @@ class ImageTab(QWidget):
             return
 
         fmt = self._format_combo.currentText()
+        if fmt == "JPEG" and not self._password_edit.text():
+            QMessageBox.warning(self, "Password required", "JPEG v0.3 requires a password.")
+            return
+        if fmt == "JPEG":
+            try:
+                needed, available = self._jpeg_block_counts()
+            except Exception as exc:
+                QMessageBox.warning(self, "Cannot inspect image", str(exc))
+                return
+            if needed > available:
+                self._show_jpeg_capacity_error(
+                    f"JPEG v0.3 requires {needed} blocks, but image has {available}"
+                )
+                return
         last_dir = self._settings.value("last_dir", "", str)
         out_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -565,8 +627,25 @@ class ImageTab(QWidget):
         if not out_path.lower().endswith(suffix):
             out_path += suffix
 
+        if Path(out_path).resolve() == Path(self._file_path).resolve():
+            self.status_message.emit("Output file must differ from the source image.")
+            return
+
         self._pending_out_path = out_path
         self._pending_fmt = fmt
+
+        if fmt == "JPEG":
+            self._set_busy(True)
+            self.status_message.emit("Optimizing and verifying JPEG…")
+            self._worker = _JpegOptimizeWorker(
+                self._file_path, out_path, message.encode("utf-8"),
+                self._password_edit.text(),
+            )
+            self._worker.finished.connect(self._on_jpeg_done)
+            self._worker.capacity_error.connect(self._show_jpeg_capacity_error)
+            self._worker.error.connect(self._on_worker_error)
+            self._worker.start()
+            return
 
         self._set_busy(True)
         self.status_message.emit("Embedding message…")
@@ -574,12 +653,29 @@ class ImageTab(QWidget):
             self._file_path,
             message.encode("utf-8"),
             self._password_edit.text(),
-            self._alpha_float(),
+            1.0,  # ignored by the lossless LSB encoder
             fmt,
         )
         self._worker.finished.connect(self._on_encode_done)
         self._worker.error.connect(self._on_worker_error)
         self._worker.start()
+
+    def _show_jpeg_capacity_error(self, message: str) -> None:
+        self._set_busy(False)
+        friendly = (
+            "This image is too small for the JPEG v0.3 message.\n\n"
+            + message + "\n\nUse a larger image or shorten the message."
+        )
+        self.status_message.emit("JPEG image capacity exceeded.")
+        QMessageBox.warning(self, "JPEG capacity exceeded", friendly)
+
+    def _on_jpeg_done(self, result: object) -> None:
+        self._set_busy(False)
+        self.status_message.emit(
+            f"Saved verified JPEG: {result.output_path.name} "
+            f"(strength={result.strength}, attempts={result.attempts}, "
+            f"PSNR={result.psnr:.2f} dB)"
+        )
 
     def _on_encode_done(self, result: object) -> None:
         self._set_busy(False)
