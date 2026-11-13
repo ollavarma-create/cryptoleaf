@@ -2,11 +2,18 @@
 """Cryptoleaf JPEG v0.3 format header."""
 
 import struct
+import zlib
 
 MAGIC = b"STGC"
 VERSION = 3
 HEADER_SIZE = 32
 RS_NSYM = 64
+
+
+def _header_crc(header: bytes) -> int:
+    """Calculate CRC32 excluding the checksum field."""
+    return zlib.crc32(header[:10] + header[14:32]) & 0xFFFFFFFF
+
 
 
 def build_header(encoded_payload_len: int) -> bytes:
@@ -19,10 +26,14 @@ def build_header(encoded_payload_len: int) -> bytes:
     struct.pack_into(">I", header, 4, encoded_payload_len)
     header[8] = VERSION
     header[9] = RS_NSYM
+    struct.pack_into(">I", header, 10, _header_crc(header))
     return bytes(header)
 
 
 def parse_header(data: bytes) -> int:
+    stored_crc = struct.unpack_from(">I", data, 10)[0]
+    if stored_crc != _header_crc(data):
+        raise ValueError("JPEG v0.3 header CRC mismatch")
     """Validate header and return RS-encoded payload length."""
     if len(data) != HEADER_SIZE:
         raise ValueError("Invalid JPEG v0.3 header size")
@@ -32,7 +43,7 @@ def parse_header(data: bytes) -> int:
         raise ValueError("Unsupported JPEG v0.3 version")
     if data[9] != RS_NSYM:
         raise ValueError("Unsupported Reed-Solomon configuration")
-    if any(data[10:]):
+    if any(data[14:]):
         raise ValueError("Nonzero reserved header bytes")
 
     return struct.unpack_from(">I", data, 4)[0]

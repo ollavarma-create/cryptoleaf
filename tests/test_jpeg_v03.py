@@ -109,3 +109,19 @@ def test_pipeline_rejects_wrong_password():
 
     with pytest.raises(ValueError, match="Authentication failed"):
         recover_payload(encoded, "wrong")
+
+
+def test_header_crc_detects_corruption():
+    header = bytearray(build_header(4096))
+    header[5] ^= 0x01
+
+    with pytest.raises(ValueError, match="CRC mismatch"):
+        parse_header(bytes(header))
+
+
+def test_header_crc_detects_checksum_corruption():
+    header = bytearray(build_header(4096))
+    header[10] ^= 0x01
+
+    with pytest.raises(ValueError, match="CRC mismatch"):
+        parse_header(bytes(header))
