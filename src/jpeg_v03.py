@@ -10,6 +10,68 @@ HEADER_SIZE = 32
 RS_NSYM = 64
 
 
+# JPEG block-luminance parameters
+BLOCK_SIZE = 8
+BLOCKS_PER_BYTE = 42
+RS_DATA_BYTES = 255 - RS_NSYM
+GCM_OVERHEAD = 44  # salt + nonce + authentication tag
+
+
+def encoded_payload_size(message_len: int) -> int:
+    """Exact RS-encoded size of an AES-GCM message."""
+    if message_len < 0:
+        raise ValueError("Negative message length")
+
+    encrypted_len = message_len + GCM_OVERHEAD
+    rs_blocks = (encrypted_len + RS_DATA_BYTES - 1) // RS_DATA_BYTES
+
+    return encrypted_len + rs_blocks * RS_NSYM
+
+
+def required_blocks(message_len: int) -> int:
+    """JPEG luminance blocks required for a v0.3 message."""
+    return (HEADER_SIZE + encoded_payload_size(message_len)) * BLOCKS_PER_BYTE
+
+
+def available_blocks(width: int, height: int) -> int:
+    """Count usable 8x8 blocks, skipping the first block row."""
+    if width < 0 or height < 0:
+        raise ValueError("Negative image dimensions")
+
+    columns = width // BLOCK_SIZE
+    rows = max(0, height // BLOCK_SIZE - 1)
+
+    return columns * rows
+
+
+def message_fits(width: int, height: int, message_len: int) -> bool:
+    """Whether the message fits in a JPEG cover image."""
+    return required_blocks(message_len) <= available_blocks(width, height)
+
+
+def max_message_size(width: int, height: int) -> int:
+    """Maximum plaintext bytes fitting the image geometrically."""
+    capacity_bytes = available_blocks(width, height) // BLOCKS_PER_BYTE
+    payload_capacity = capacity_bytes - HEADER_SIZE
+
+    if payload_capacity < GCM_OVERHEAD + RS_NSYM:
+        return 0
+
+    # Binary search handles the RS block boundaries exactly.
+    low, high = 0, payload_capacity
+
+    while low < high:
+        mid = (low + high + 1) // 2
+
+        if encoded_payload_size(mid) <= payload_capacity:
+            low = mid
+        else:
+            high = mid - 1
+
+    return low
+
+
+
 def _header_crc(header: bytes) -> int:
     """Calculate CRC32 excluding the checksum field."""
     return zlib.crc32(header[:10] + header[14:32]) & 0xFFFFFFFF
@@ -30,13 +92,16 @@ def build_header(encoded_payload_len: int) -> bytes:
     return bytes(header)
 
 
+
 def parse_header(data: bytes) -> int:
-    stored_crc = struct.unpack_from(">I", data, 10)[0]
-    if stored_crc != _header_crc(data):
-        raise ValueError("JPEG v0.3 header CRC mismatch")
     """Validate header and return RS-encoded payload length."""
     if len(data) != HEADER_SIZE:
         raise ValueError("Invalid JPEG v0.3 header size")
+
+    stored_crc = struct.unpack_from(">I", data, 10)[0]
+    if stored_crc != _header_crc(data):
+        raise ValueError("JPEG v0.3 header CRC mismatch")
+
     if data[:4] != MAGIC:
         raise ValueError("Invalid JPEG v0.3 magic")
     if data[8] != VERSION:
@@ -47,6 +112,7 @@ def parse_header(data: bytes) -> int:
         raise ValueError("Nonzero reserved header bytes")
 
     return struct.unpack_from(">I", data, 4)[0]
+
 
 
 from .error_correction import rs_encode, rs_decode

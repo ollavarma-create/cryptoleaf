@@ -125,3 +125,48 @@ def test_header_crc_detects_checksum_corruption():
 
     with pytest.raises(ValueError, match="CRC mismatch"):
         parse_header(bytes(header))
+
+
+from src.jpeg_v03 import (
+    encoded_payload_size,
+    required_blocks,
+    available_blocks,
+    message_fits,
+    max_message_size,
+)
+
+
+def test_empty_message_size():
+    # 44 AES-GCM bytes + 64 RS parity bytes
+    assert encoded_payload_size(0) == 108
+    assert required_blocks(0) == (32 + 108) * 42
+
+
+def test_rs_block_boundary():
+    # 191 bytes fit in one RS data block.
+    assert encoded_payload_size(147) == 255
+    assert encoded_payload_size(148) == 320
+
+
+def test_skipped_first_block_row():
+    assert available_blocks(80, 80) == 90
+    assert available_blocks(80, 8) == 0
+
+
+def test_capacity_boundary():
+    width, height = 1024, 1024
+    maximum = max_message_size(width, height)
+
+    assert maximum > 0
+    assert message_fits(width, height, maximum)
+    assert not message_fits(width, height, maximum + 1)
+
+
+def test_too_small_image():
+    assert max_message_size(64, 64) == 0
+    assert not message_fits(64, 64, 0)
+
+
+def test_short_header_rejected():
+    with pytest.raises(ValueError, match="header size"):
+        parse_header(b"STGC")
