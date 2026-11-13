@@ -49,6 +49,7 @@ from .crypto import encrypt
 from .error_correction import rs_encode, hamming_encode
 
 from .jpeg_v03 import build_header, prepare_payload, required_blocks
+from .jpeg_interleave import interleave3
 
 logger = logging.getLogger(__name__)
 
@@ -357,23 +358,38 @@ def _encode_image_block(
 
 
 
+
 def _embed_prepared_v03(
     cover_path: Path,
     rs_payload: bytes,
     strength: int = _DEFAULT_BLOCK_STRENGTH,
+    *,
+    cover_image: Image.Image | None = None,
 ) -> Image.Image:
     """Embed an already encrypted and RS-encoded JPEG v0.3 payload."""
 
     from .jpeg_v03 import build_header
 
-    with Image.open(cover_path) as img:
-        orig_img = img.convert("RGB")
+    if cover_image is None:
+        with Image.open(cover_path) as img:
+            orig_img = img.convert("RGB")
+    else:
+        orig_img = cover_image
 
+    
     header = build_header(len(rs_payload))
-    full_data = header + rs_payload
 
-    raw_bits = _bits_from_bytes(full_data)
-    encoded_bits = _replicate3(hamming_encode(raw_bits))
+    # JPEG v0.3: interleave header and payload separately.
+    header_bits = interleave3(
+        hamming_encode(_bits_from_bytes(header))
+    )
+
+    payload_bits = interleave3(
+        hamming_encode(_bits_from_bytes(rs_payload))
+    )
+
+    encoded_bits = header_bits + payload_bits
+
 
     width, height = orig_img.size
     available = (width // _BLOCK_SIZE) * max(
