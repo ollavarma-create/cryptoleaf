@@ -1099,6 +1099,11 @@ class AudioTab(QWidget):
 
     def _on_file_selected(self, path: str) -> None:
         self._file_path = path
+        source_format = {
+        ".wav": "WAV",
+        ".flac": "FLAC",
+        }.get(Path(path).suffix.lower(), "FLAC")
+        self._out_format_combo.setCurrentText(source_format)
         self._settings.setValue("last_dir", str(Path(path).parent))
         self._drop_area.set_filename(Path(path).name)
         self._update_info(path)
