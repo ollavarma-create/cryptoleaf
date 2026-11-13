@@ -23,7 +23,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""AES-CBC encryption with PBKDF2-HMAC-SHA256 key derivation.
+"""AES-CBC encryption with PBKDF2-HMAC-SHA1 key derivation (legacy format).
 
 Wire format returned by encrypt():
     salt (16 bytes) | iv (16 bytes) | ciphertext (padded to AES block size)
@@ -33,6 +33,7 @@ import logging
 import os
 
 from Crypto.Cipher import AES
+from Crypto.Hash import SHA1
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Util.Padding import pad, unpad
 
@@ -58,7 +59,7 @@ def encrypt(plaintext: bytes, password: str) -> bytes:
     """
     salt = os.urandom(_SALT_LEN)
     iv = os.urandom(_IV_LEN)
-    key = PBKDF2(password, salt, dkLen=_KEY_LEN, count=_PBKDF2_ITERATIONS)
+    key = PBKDF2(password, salt, dkLen=_KEY_LEN, count=_PBKDF2_ITERATIONS, hmac_hash_module=SHA1)
     cipher = AES.new(key, AES.MODE_CBC, iv)
     ciphertext = cipher.encrypt(pad(plaintext, AES.block_size))
     logger.debug(
@@ -89,7 +90,7 @@ def decrypt(data: bytes, password: str) -> bytes:
     iv = data[_SALT_LEN: _SALT_LEN + _IV_LEN]
     ciphertext = data[_SALT_LEN + _IV_LEN:]
 
-    key = PBKDF2(password, salt, dkLen=_KEY_LEN, count=_PBKDF2_ITERATIONS)
+    key = PBKDF2(password, salt, dkLen=_KEY_LEN, count=_PBKDF2_ITERATIONS, hmac_hash_module=SHA1)
     cipher = AES.new(key, AES.MODE_CBC, iv)
     try:
         plaintext = unpad(cipher.decrypt(ciphertext), AES.block_size)

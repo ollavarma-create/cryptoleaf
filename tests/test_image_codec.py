@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from src.image_encoder import encode_image, capacity_bits, CapacityError
+from src.image_encoder import encode_image, capacity_bits, CapacityError, FallbackToPNGWarning
 from src.image_decoder import decode_image, BadMagicError
 
 logging.basicConfig(level=logging.WARNING)
@@ -99,10 +99,10 @@ class TestCapacityBits:
         assert cap > 0
 
     def test_jpeg_capacity_formula(self, jpeg_cover: Path) -> None:
-        """1024×1024 → 128×128 = 16384 blocks → 16384*4//21 = 3121 bits."""
+        """JPEG Method B skips the first row of 8×8 blocks."""
         cap = capacity_bits(jpeg_cover, output_format="JPEG")
-        # For 1024×1024: (1024//8)² × 4 // 21 = 16384 × 4 // 21 = 3121
-        assert cap == (1024 // 8) ** 2 * 4 // 21
+        # For 1024×1024: 128 × 127 usable blocks, 4 bits per 21 blocks
+        assert cap == (1024 // 8) * (1024 // 8 - 1) * 4 // 21
 
 
 # ---------------------------------------------------------------------------
@@ -117,8 +117,9 @@ class TestCapacityError:
             encode_image(small_cover, giant_payload, alpha=2.0)
 
     def test_small_payload_fits(self, small_cover: Path) -> None:
-        stego = encode_image(small_cover, b"hello", alpha=2.0)
+        stego, actual_format = encode_image(small_cover, b"hello", alpha=2.0)
         assert stego is not None
+        assert actual_format == "PNG"
 
 
 class TestLsbRoundTrip:
@@ -126,32 +127,32 @@ class TestLsbRoundTrip:
 
     def test_plaintext_roundtrip(self, small_cover: Path) -> None:
         message = b"hello world"
-        stego = encode_image(small_cover, message, password="", alpha=2.0)
+        stego, actual_format = encode_image(small_cover, message, password="", alpha=2.0)
         recovered = decode_image(stego, password="")
         assert recovered == message
 
     def test_encrypted_roundtrip(self, small_cover: Path) -> None:
         message = b"secret message 12345"
         password = "correct horse battery staple"
-        stego = encode_image(small_cover, message, password=password, alpha=2.0)
+        stego, actual_format = encode_image(small_cover, message, password=password, alpha=2.0)
         recovered = decode_image(stego, password=password)
         assert recovered == message
 
     def test_wrong_password_raises(self, small_cover: Path) -> None:
         message = b"sensitive data"
-        stego = encode_image(small_cover, message, password="rightpassword", alpha=2.0)
+        stego, actual_format = encode_image(small_cover, message, password="rightpassword", alpha=2.0)
         with pytest.raises(Exception):
             decode_image(stego, password="wrongpassword")
 
     def test_stego_image_same_dimensions(self, small_cover: Path) -> None:
         with Image.open(small_cover) as cover:
             w, h = cover.size
-        stego = encode_image(small_cover, b"test", alpha=2.0)
+        stego, actual_format = encode_image(small_cover, b"test", alpha=2.0)
         assert stego.size == (w, h)
 
     def test_various_payloads(self, small_cover: Path) -> None:
         for msg in (b"x", b"hello world", b"A" * 50):
-            stego = encode_image(small_cover, msg, alpha=2.0)
+            stego, actual_format = encode_image(small_cover, msg, alpha=2.0)
             recovered = decode_image(stego)
             assert recovered == msg, f"Failed for payload len={len(msg)}"
 
@@ -169,38 +170,39 @@ class TestBlockLuminance:
     """
 
     def test_encode_returns_pil_image(self, jpeg_cover: Path) -> None:
-        stego = encode_image(jpeg_cover, b"hello", output_format="JPEG")
+        stego, actual_format = encode_image(jpeg_cover, b"hello", output_format="JPEG")
         assert isinstance(stego, Image.Image)
+        assert actual_format == "JPEG"
 
     def test_plaintext_roundtrip(self, jpeg_cover: Path) -> None:
         message = b"hello world"
-        stego = encode_image(jpeg_cover, message, output_format="JPEG")
+        stego, actual_format = encode_image(jpeg_cover, message, output_format="JPEG")
         recovered = decode_image(stego)
         assert recovered == message
 
     def test_encrypted_roundtrip(self, jpeg_cover: Path) -> None:
         message = b"secret message 12345"
         password = "correcthorsebatterystaple"
-        stego = encode_image(jpeg_cover, message, password=password, output_format="JPEG")
+        stego, actual_format = encode_image(jpeg_cover, message, password=password, output_format="JPEG")
         recovered = decode_image(stego, password=password)
         assert recovered == message
 
     def test_wrong_password_raises(self, jpeg_cover: Path) -> None:
         message = b"sensitive"
-        stego = encode_image(jpeg_cover, message, password="right", output_format="JPEG")
+        stego, actual_format = encode_image(jpeg_cover, message, password="right", output_format="JPEG")
         with pytest.raises(Exception):
             decode_image(stego, password="wrong")
 
     def test_same_dimensions_after_encode(self, jpeg_cover: Path) -> None:
         with Image.open(jpeg_cover) as cover:
             w, h = cover.size
-        stego = encode_image(jpeg_cover, b"dim test", output_format="JPEG")
+        stego, actual_format = encode_image(jpeg_cover, b"dim test", output_format="JPEG")
         assert stego.size == (w, h)
 
     def test_survives_jpeg_save_at_q85(self, jpeg_cover: Path, tmp_path: Path) -> None:
         """Payload survives a JPEG save at quality 85 (the standard save quality)."""
         message = b"survives jpeg q85"
-        stego = encode_image(jpeg_cover, message, output_format="JPEG")
+        stego, actual_format = encode_image(jpeg_cover, message, output_format="JPEG")
 
         saved = tmp_path / "stego.jpg"
         stego.save(saved, format="JPEG", quality=85)
@@ -212,7 +214,7 @@ class TestBlockLuminance:
     def test_survives_jpeg_save_at_q75(self, jpeg_cover: Path, tmp_path: Path) -> None:
         """Payload survives a second JPEG compression at quality 75."""
         message = b"survives q75"
-        stego = encode_image(jpeg_cover, message, output_format="JPEG")
+        stego, actual_format = encode_image(jpeg_cover, message, output_format="JPEG")
 
         saved = tmp_path / "stego.jpg"
         stego.save(saved, format="JPEG", quality=75)
@@ -226,8 +228,10 @@ class TestBlockLuminance:
     ) -> None:
         cap_bits = capacity_bits(jpeg_cover, output_format="JPEG")
         giant = bytes(cap_bits)   # many more bytes than capacity allows
-        with pytest.raises(CapacityError):
-            encode_image(jpeg_cover, giant, output_format="JPEG")
+        with pytest.warns(FallbackToPNGWarning):
+            stego, actual_format = encode_image(jpeg_cover, giant, output_format="JPEG")
+        assert actual_format == "PNG"
+        assert decode_image(stego) == giant
 
     def test_bad_magic_on_plain_jpeg(self, jpeg_cover: Path) -> None:
         """A plain (non-stego) JPEG raises BadMagicError on decode."""
