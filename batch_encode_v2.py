@@ -23,7 +23,10 @@ def main():
     if args.dry_run:
         print(f"Planned: {sum(r.status == 'DRY_RUN' for r in results)}/{len(results)} images; 0 processed")
     else:
-        print(f"Completed: {sum(r.status == 'OK' for r in results)}/{len(results)} OK")
+        ok = sum(r.status == "OK" for r in results)
+        skipped = sum(r.status == "SKIPPED" for r in results)
+        failed = sum(r.status == "FAIL" for r in results)
+        print(f"Completed: {ok} OK, {skipped} SKIPPED, {failed} FAILED ({len(results)} total)")
 
 
 if __name__ == "__main__":

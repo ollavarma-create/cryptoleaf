@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from .image_encoder import encode_image
+from .image_encoder import CapacityError, encode_image
 from .image_decoder import decode_image
 from .jpeg_optimizer import optimize_jpeg
 
@@ -106,6 +106,9 @@ def process_batch(
                         temp_path.unlink(missing_ok=True)
                 finally:
                     image.close()
+        except CapacityError as exc:
+            status = "SKIPPED"
+            error = f"{type(exc).__name__}: {exc}"
         except Exception as exc:
             status = "FAIL"
             error = f"{type(exc).__name__}: {exc}"
