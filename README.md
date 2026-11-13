@@ -1,8 +1,12 @@
-# Cryptoleaf – Steganography Tool v0.2.1
+# Cryptoleaf — Steganography Tool
 
-Hide encrypted messages inside image and audio files. Messages are AES-256-CBC
-encrypted before embedding, so inspecting the file alone reveals nothing without
-the password.
+**Published release:** v0.2.1 · **In development:** JPEG v0.3 (`feature/jpeg-v03`)
+
+Hide messages inside image and audio files, with optional password-based encryption.
+The published v0.2.1 release and the in-development JPEG v0.3 branch have
+different capabilities; features under **JPEG v0.3 development** are not claimed
+to be included in the published binaries. Do not treat steganography alone as a
+guarantee of confidentiality or undetectability.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
@@ -15,7 +19,7 @@ the password.
 
 ## Download
 
-**Cryptoleaf — pre-built binaries for multiple platforms:**
+**Published v0.2.1 binaries (not JPEG v0.3 builds):**
 Releases are available in the `/Distit` directory.
 
 1. **Windows** — unzip and run `Cryptoleaf.exe`:
@@ -57,7 +61,7 @@ Releases are available in the `/Distit` directory.
 **Requirements:** Python 3.10+
 
 ```bash
-git clone https://github.org/ollavarma-create/cryptoleaf
+git clone https://github.com/ollavarma-create/cryptoleaf.git
 cd cryptoleaf
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
@@ -116,9 +120,9 @@ python Cryptoleaf.py
 2. Enter the password (if one was used)
 3. Click **Extract Message**
 
-### Command Line
+### Command Line (published v0.2.1)
 
-The tool is GUI-based. Direct module use is available for developers:
+The published version is GUI-based. Direct module use is available for developers:
 
 ```python
 from src.image_encoder import encode_image
@@ -142,18 +146,19 @@ The password for all stego files is `qwerty`.
 
 ## Technical Description
 
-### Image Hiding — Method A (PNG, BMP, WEBP)
+### Image Hiding — Lossless Images (PNG, BMP, WEBP)
 
-DWT + spread spectrum: the message is embedded into the 2D Discrete Wavelet Transform
-domain of the image (PyWavelets, `db1`, level 2) in the LH and HL subbands. Each bit
-is spread across multiple coefficients using a PRNG (seed = password).
-Reed-Solomon error correction (RSCodec(32)) protects the payload.
+The current image feature list identifies LSB embedding for lossless image formats.
+The decoder also supports a legacy DWT-based method. The precise encoding path
+and compatibility of older stego files should be verified against the source
+before making stronger implementation guarantees. Reed–Solomon protection is
+documented for the lossless image payload.
 
 - Capacity: depends on image size and alpha value
 - Lossless format: change is visually imperceptible
 - Does not survive lossy compression
 
-### Image Hiding — Method B (JPEG)
+### Image Hiding — Method B (JPEG, published v0.2.1)
 
 Block-based luminance method, optimised for JPEG's 8×8 DCT grid:
 
@@ -187,19 +192,89 @@ Survives JPEG compression at quality ≥ 75 on natural photographs.
 
 ---
 
+## JPEG v0.3 development
+
+The `feature/jpeg-v03` branch introduces a more robust JPEG workflow and a
+command-line batch encoder. **These are development-branch features, not features
+of the published v0.2.1 installers.**
+
+### JPEG encoding and reliability
+
+- Uses 8×8-block luminance embedding with error protection involving
+  Reed–Solomon coding, Hamming(7,4), and 3× interleaving.
+- Tries multiple embedding strengths and selects the first strength whose
+  **saved JPEG** can be decoded successfully (`first_success`).
+- Candidate strengths currently include `10, 15, 20, 30, 40, 50, 60, 80`.
+- Reports the selected strength and number of attempts; JPEG output quality
+  defaults to 85 in the batch CLI.
+- Some images do not have enough usable 8×8 blocks for the protected payload.
+  These are classified as **SKIPPED**, rather than as unexpected failures.
+- JPEG re-encoding, resizing, cropping, or editing after embedding may damage
+  the hidden message. Successful decoding of the saved output does not imply
+  survival of arbitrary later transformations.
+
+### Batch encoding CLI
+
+From the repository root, after installing dependencies:
+
+```bash
+python batch_encode.py input_images output_images \
+  --message "Secret message" \
+  --password "choose-a-strong-password"
+```
+
+The batch encoder supports JPEG, PNG, BMP, and WEBP inputs. Available options:
+
+```text
+--message TEXT     Message to embed (required)
+--password TEXT    Password (required)
+--quality N        JPEG output quality (default: 85)
+--dry-run          Preview the batch without encoding
+--skip-existing    Skip files with existing output
+```
+
+Each image receives an **OK**, **SKIPPED**, or **FAIL** status. JPEG results
+include strength and attempt counts where available. A `batch_report.csv`
+file is written to the output directory for non-dry-run batches.
+
+For example, a ten-image JPEG test batch completed with **8 OK, 2 SKIPPED,
+0 FAILED**; both skips were caused by insufficient JPEG block capacity. This
+is an example result, not a promised success rate for other image collections.
+
+The batch CLI is an **encoder**, not a separate batch extraction command. Use
+the appropriate image decoder or GUI extraction workflow to recover messages.
+
+### Development tests
+
+```bash
+python -m pytest tests/ -q
+```
+
+At the time of this documentation update, **94 tests passed** on the
+development branch. This test result is not a security audit or a guarantee
+that every image can carry every payload.
+
+---
+
 ## Project Structure
 
 ```
-Cryptoleaf.py          # Entry point
+Cryptoleaf.py          # GUI entry point
+batch_encode.py        # Development-branch batch encoding CLI
 src/
   image_encoder.py    # Image hiding: LSB (PNG/BMP/WEBP) + Method B (JPEG)
-  image_decoder.py    # Image extraction: LSB / DWT (legacy) / Method B
+  image_decoder.py    # Image extraction: LSB / DWT (legacy) / JPEG
+  jpeg_optimizer.py   # Development-branch JPEG strength optimization
+  batch_processor.py  # Development-branch batch engine and CSV reports
+  image_quality.py    # Image quality metrics (including PSNR)
   audio_encoder.py    # Audio hiding: 1-bit LSB
   audio_decoder.py    # Audio extraction
   crypto.py           # AES-CBC encryption/decryption, PBKDF2 key derivation
   error_correction.py # Reed-Solomon + Hamming(7,4) error correction
   gui.py              # PyQt6 GUI — main window, tabs, worker threads
   utils.py            # Shared utilities (logging, format detection, EXIF)
+benchmarks/             # Performance and reliability experiments
+scripts/                # Manual diagnostics
 tests/
   test_image_codec.py # Image codec unit and integration tests
   test_audio_codec.py # Audio codec tests
@@ -235,6 +310,17 @@ Test coverage includes:
 |---------|------|---------|
 | v0.1.1 | April 2025 | Initial release: LSB+DCT images, LSB+RS audio, PyQt6 GUI |
 | v0.2.1 | March 2026 | Method B JPEG, MP3 support, EXIF display, QSS styles, About tab |
+| JPEG v0.3 (development) | Unreleased | JPEG error protection and strength optimization, batch CLI, reporting and tests |
+
+---
+
+## Documentation notes
+
+The legacy technical sections above describe the published v0.2.1 release.
+Before publishing a v0.3 release, verify the encryption parameters, legacy
+DWT/LSB compatibility, JPEG capacity formula, binary download paths, and GUI
+feature parity against the release commit. The v0.3 branch is not presented
+as a completed release here.
 
 ---
 
