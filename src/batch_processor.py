@@ -6,6 +6,7 @@ import csv
 import os
 import time
 from dataclasses import asdict, dataclass
+from typing import Callable
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -39,11 +40,14 @@ def process_batch(
     quality: int = 85,
     dry_run: bool = False,
     skip_existing: bool = False,
+    on_progress: Callable[[BatchResult, int, int], None] | None = None,
 ) -> list[BatchResult]:
     """Process immediate image files, returning one result per supported file.
 
     Does not overwrite outputs. Existing files are either skipped or reported as
     errors. Output and report directories must be separate from the input tree.
+    Optional on_progress(result, completed, total) runs after each image,
+    in the caller thread. GUI callers must emit a Qt signal, not touch widgets.
     """
     source = Path(input_dir).resolve()
     destination = Path(output_dir).resolve()
@@ -63,6 +67,7 @@ def process_batch(
         destination.mkdir(parents=True, exist_ok=True)
 
     results: list[BatchResult] = []
+    total = len(files)
     for cover in files:
         fmt = FORMATS[cover.suffix.lower()]
         output = destination / f"{cover.stem}_cryptoleaf{cover.suffix.lower()}"
@@ -112,7 +117,10 @@ def process_batch(
         except Exception as exc:
             status = "FAIL"
             error = f"{type(exc).__name__}: {exc}"
-        results.append(BatchResult(cover.name, str(output), fmt, status, strength, attempts, psnr, round(time.perf_counter() - start, 3), error))
+        item = BatchResult(cover.name, str(output), fmt, status, strength, attempts, psnr, round(time.perf_counter() - start, 3), error)
+        results.append(item)
+        if on_progress is not None:
+            on_progress(item, len(results), total)
     return results
 
 
