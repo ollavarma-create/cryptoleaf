@@ -26,3 +26,18 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Cryptoleaf generated batch outputs
+/batch_output*/
+/benchmark_single/
+/benchmark_lossless/
+
+# Cryptoleaf local benchmark image datasets
+/benchmark_images/
+
+# Cryptoleaf generated benchmark reports
+/benchmark_results.csv
+/jpeg_reliability.csv
+
+# Cryptoleaf temporary test outputs
+/test_roundtrip.jpg
