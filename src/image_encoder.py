@@ -48,6 +48,8 @@ from PIL import Image
 from .crypto import encrypt
 from .error_correction import rs_encode, hamming_encode
 
+from .jpeg_v03 import build_header, prepare_payload, required_blocks
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["encode_image", "capacity_bits", "CapacityError", "FallbackToPNGWarning"]
@@ -352,6 +354,92 @@ def _encode_image_block(
         "encode_image [Block]: done, stego image %dx%d.", stego_img.width, stego_img.height
     )
     return stego_img
+
+
+
+def _embed_prepared_v03(
+    cover_path: Path,
+    rs_payload: bytes,
+    strength: int = _DEFAULT_BLOCK_STRENGTH,
+) -> Image.Image:
+    """Embed an already encrypted and RS-encoded JPEG v0.3 payload."""
+
+    from .jpeg_v03 import build_header
+
+    with Image.open(cover_path) as img:
+        orig_img = img.convert("RGB")
+
+    header = build_header(len(rs_payload))
+    full_data = header + rs_payload
+
+    raw_bits = _bits_from_bytes(full_data)
+    encoded_bits = _replicate3(hamming_encode(raw_bits))
+
+    width, height = orig_img.size
+    available = (width // _BLOCK_SIZE) * max(
+        0, height // _BLOCK_SIZE - 1
+    )
+
+    if len(encoded_bits) > available:
+        raise CapacityError(
+            f"JPEG v0.3 requires {len(encoded_bits)} blocks, "
+            f"but image has {available}"
+        )
+
+    ycbcr_arr = np.array(
+        orig_img.convert("YCbCr"),
+        dtype=np.uint8,
+    )
+
+    ycbcr_arr = _embed_block_luminance(
+        ycbcr_arr,
+        encoded_bits,
+        strength,
+    )
+
+    return Image.fromarray(
+        ycbcr_arr,
+        mode="YCbCr",
+    ).convert("RGB")
+
+
+
+def _encode_image_block_v03(
+    cover_path: Path,
+    payload: bytes,
+    password: str,
+    strength: int = _DEFAULT_BLOCK_STRENGTH,
+) -> Image.Image:
+    """JPEG v0.3: AES-GCM + Reed-Solomon + Hamming + repetition."""
+
+    from .jpeg_v03 import prepare_payload, required_blocks
+
+    if not password:
+        raise ValueError("JPEG v0.3 requires a password")
+
+    with Image.open(cover_path) as img:
+        width, height = img.size
+
+    needed = required_blocks(len(payload))
+    available = (width // _BLOCK_SIZE) * max(
+        0, height // _BLOCK_SIZE - 1
+    )
+
+    if needed > available:
+        raise CapacityError(
+            f"JPEG v0.3 requires {needed} blocks, "
+            f"but image has {available}"
+        )
+
+    rs_payload = prepare_payload(payload, password)
+
+    return _embed_prepared_v03(
+        cover_path,
+        rs_payload,
+        strength,
+    )
+
+
 
 
 # ---------------------------------------------------------------------------
