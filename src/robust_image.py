@@ -25,6 +25,8 @@ DELTA = 32.0
 REPEAT = 9
 FEEDBACK_ITERATIONS = 6
 MAX_LONGEST = 1280
+# Reject oversized images before allocating FFT/DWT working arrays.
+MAX_DECODE_PIXELS = MAX_LONGEST * MAX_LONGEST
 
 
 @dataclass(frozen=True)
@@ -99,30 +101,45 @@ def encode(image: Image.Image, payload: bytes, longest: int = MAX_LONGEST) -> Im
     return _feedback_embed(_pilot_embed(image), pack(payload))
 
 
-def _read_bytes(image, size, nbytes):
-    if image.size != size:
-        image = image.resize(size, Image.Resampling.LANCZOS)
-    ll = pywt.wavedec2(_ycc(image)[:, :, 0], 'haar', level=2, mode='periodization')[0].ravel()
+def _read_from_ll(ll, nbytes, positions=None):
+    """Read a packet prefix from one already-computed LL2 coefficient array."""
     count = nbytes * 8 * REPEAT
     if count > ll.size:
         raise ValueError('Insufficient DWT capacity')
-    pos = np.random.default_rng(SEED).permutation(ll.size)[:count]
-    q = np.rint(ll[pos] / DELTA).astype(np.int64) & 1
+    if positions is None:
+        positions = np.random.default_rng(SEED).permutation(ll.size)
+    q = np.rint(ll[positions[:count]] / DELTA).astype(np.int64) & 1
     bits = (q.reshape(-1, REPEAT).sum(axis=1) > REPEAT // 2).astype(np.uint8)
     return np.packbits(bits).tobytes()
 
 
+def _read_bytes(image, size, nbytes):
+    if image.size != size:
+        image = image.resize(size, Image.Resampling.LANCZOS)
+    ll = pywt.wavedec2(_ycc(image)[:, :, 0], 'haar', level=2, mode='periodization')[0].ravel()
+    return _read_from_ll(ll, nbytes)
+
+
 def decode_at_size(image: Image.Image, size: tuple[int, int]) -> bytes:
-    """Oracle-size decoder, also useful to diagnose synchronization failures."""
+    """Oracle-size decoder; compute the DWT once for header and payload."""
     if min(size) < 32:
         raise ValueError('Invalid original size')
-    header = _read_bytes(image, size, HEADER_BYTES)
+    if max(size) > MAX_LONGEST or size[0] * size[1] > MAX_DECODE_PIXELS:
+        raise ValueError('Robust candidate exceeds safe image dimensions')
+    if image.size != size:
+        image = image.resize(size, Image.Resampling.LANCZOS)
+    ll = pywt.wavedec2(_ycc(image)[:, :, 0], 'haar', level=2, mode='periodization')[0].ravel()
+    # Generate only the header positions for the common no-message case.
+    # On a valid header, regenerate the same deterministic permutation for
+    # the complete packet; the prefix is identical.
+    positions = np.random.default_rng(SEED).permutation(ll.size)
+    header = _read_from_ll(ll, HEADER_BYTES, positions)
     if header[:4] != b'CLR1':
         raise ValueError('Invalid CLR1 header')
     length = int.from_bytes(header[4:6], 'big')
     if not 12 <= length <= MAX_CODEWORD:
         raise ValueError('Invalid CLR1 length')
-    return unpack(_read_bytes(image, size, HEADER_BYTES + length))
+    return unpack(_read_from_ll(ll, HEADER_BYTES + length, positions))
 
 
 def _profile(image, bins=1800, max_freq=.38):
@@ -210,16 +227,60 @@ def candidate_sizes_priority50(image, max_candidates=160):
         active = remaining
 
 
-def decode(image: Image.Image, max_candidates=160) -> DecodeResult:
+class MessageNotFoundError(ValueError):
+    """No valid robust packet recovered within the configured search budget."""
+
+
+def _prepare_decode_image(image: Image.Image, should_cancel=None) -> Image.Image:
+    """Bound working resolution before FFT/DWT; do not modify source on disk.
+
+    This is a compatibility attempt for oversized received images, not a
+    guarantee that resampling preserves an embedded message.
+    """
+    if should_cancel is not None and should_cancel():
+        raise InterruptedError('Robust extraction cancelled')
+    # JPEG draft decoding may reduce peak memory before loading pixel data.
+    if max(image.size) > MAX_LONGEST and image.format == 'JPEG':
+        image.draft('RGB', (MAX_LONGEST, MAX_LONGEST))
+    image = ImageOps.exif_transpose(image)
+    if max(image.size) > MAX_LONGEST:
+        image.thumbnail((MAX_LONGEST, MAX_LONGEST), Image.Resampling.LANCZOS)
+    if should_cancel is not None and should_cancel():
+        raise InterruptedError('Robust extraction cancelled')
+    return image.convert('RGB')
+
+
+def decode(image: Image.Image, max_candidates=160, should_cancel=None) -> DecodeResult:
     """Blind decode with no original dimensions. Failure does not imply no embedded message."""
     if max_candidates < 1:
         raise ValueError('max_candidates must be positive')
-    image = ImageOps.exif_transpose(image).convert('RGB')
+    image = _prepare_decode_image(image, should_cancel)
     attempts = 0
     for size in candidate_sizes_priority50(image, max_candidates):
+        if should_cancel is not None and should_cancel():
+            raise InterruptedError('Robust extraction cancelled')
+        if max(size) > MAX_LONGEST or size[0] * size[1] > MAX_DECODE_PIXELS:
+            continue
         attempts += 1
         try:
             return DecodeResult(decode_at_size(image, size), size, attempts)
         except ValueError:
             pass
-    raise ValueError(f'Robust message not recovered after {attempts} candidates')
+    # Bounded fallback for cases where the pilot estimates only unsafe sizes.
+    # This does not change the measured Priority50 ordering or its budget.
+    # The half-size candidate covers an exact 2x enlargement.
+    fallback_sizes = [
+        image.size,
+        tuple(max(32, round(v / 2)) for v in image.size),
+    ]
+    for size in dict.fromkeys(fallback_sizes):
+        if should_cancel is not None and should_cancel():
+            raise InterruptedError('Robust extraction cancelled')
+        if max(size) > MAX_LONGEST or size[0] * size[1] > MAX_DECODE_PIXELS:
+            continue
+        attempts += 1
+        try:
+            return DecodeResult(decode_at_size(image, size), size, attempts)
+        except ValueError:
+            pass
+    raise MessageNotFoundError(f'Robust message not recovered after {attempts} candidates')
