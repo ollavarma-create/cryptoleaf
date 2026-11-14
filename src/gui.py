@@ -1282,43 +1282,79 @@ class AudioTab(QWidget):
 # About tab
 # ---------------------------------------------------------------------------
 
-_ABOUT_TEXT = """\
-<h2>Cryptoleaf v0.3-dev</h2>
-<p>Copyright &copy; 2026 Jari Hiltunen / Codeberg hiltsu</p>
 
-<h3>WHAT IS CRYPTOLEAF?</h3>
-<p>Cryptoleaf is a steganography tool that hides encrypted messages inside image and audio files in such a way that the files still look and sound completely normal.</p>
+_ABOUT_TEXT = f"""\
+<h2>Cryptoleaf {_VERSION}</h2>
+<p>Copyright &copy; 2026 Jari Hiltunen</p>
 
-<h3>USE CASES</h3>
+<p>
+<a href="https://github.com/ollavarma-create/cryptoleaf">
+GitHub – Cryptoleaf project
+</a>
+</p>
+
+<h3>ABOUT CRYPTOLEAF</h3>
+<p>
+Cryptoleaf is an open-source steganography application for
+hiding encrypted messages in image and audio files.
+It combines encryption with data-hiding techniques to
+reduce the visibility of embedded information.
+</p>
+
+<h3>FEATURES</h3>
 <ul>
-  <li><b>Secure communication</b> – hide a message inside an image</li>
-  <li><b>Watermarking</b> – embed ownership information into images</li>
-  <li><b>Metadata embedding</b> – add hidden contextual information to images</li>
-  <li><b>Digital evidence</b> – embed a timestamp or identifier into an image</li>
+  <li>Hide and extract encrypted messages in supported image and audio files.</li>
+  <li>Adjust embedding strength to balance robustness and perceptual quality.</li>
+  <li>Use error-correction techniques to improve extraction reliability.</li>
+  <li>Decode supported files created with earlier Cryptoleaf versions.</li>
 </ul>
 
 <h3>TECHNICAL METHODS</h3>
 <ul>
-  <li><b>Image (PNG/BMP/WEBP):</b> DWT + spread spectrum + Reed-Solomon error correction</li>
-  <li><b>Image (JPEG):</b> Block-based luminance method + Hamming(7,4) + 3× replication</li>
-  <li><b>Audio (WAV/MP3/FLAC):</b> Spread spectrum with frequency filtering + Reed-Solomon</li>
-  <li><b>Encryption:</b> AES-256-CBC + PBKDF2-HMAC-SHA256 (200,000 iterations)</li>
+  <li><b>PNG / BMP / WebP:</b>
+      Discrete Wavelet Transform (DWT), spread-spectrum embedding
+      and Reed-Solomon error correction.</li>
+  <li><b>JPEG:</b>
+      Block-based luminance embedding, Hamming(7,4)
+      error correction and triple replication.</li>
+  <li><b>Audio:</b>
+      Spread-spectrum embedding with frequency filtering
+      and Reed-Solomon error correction.</li>
+  <li><b>Encryption:</b>
+      AES-256-CBC with PBKDF2-based key derivation.
+      Legacy decoding compatibility is maintained for supported older formats.</li>
 </ul>
 
-<h3>NOTE ABOUT JPEG IMAGES</h3>
-<p>JPEG compression is lossy. It is always recommended to open an encrypted JPEG file and verify successful extraction before sending the file.</p>
+<h3>IMPORTANT LIMITATIONS</h3>
+<p>
+Steganography conceals the presence of information but does
+not guarantee that hidden data is undetectable.
+Embedding may introduce visible or audible artefacts.
+</p>
+<p>
+Lossy compression, image editing, audio processing or
+format conversion may damage embedded information and
+prevent successful extraction.
+</p>
+<p>
+Always verify that a hidden message can be extracted
+successfully before distributing the carrier file.
+</p>
 
-<h3>OLD VERSION</h3>
-<p>Old working version (v0.1.1) with binaries:<br>
-  <a href="https://codeberg.org/hiltsu/old_v0.1_steganography_encrypter_decrypter">https://codeberg.org/hiltsu/old_v0.1_steganography_encrypter_decrypter</a></p>
+<h3>DEVELOPMENT STATUS</h3>
+<p>
+Cryptoleaf is under active development.
+This development version is intended for testing and evaluation.
+It has not been independently security-audited and should not
+be relied upon for high-risk confidential communications.
+</p>
 
-Finnish / Suomi:
-
-<h2>Cryptoleaf v0.3-dev</h2> <p>Copyright © 2026 Jari Hiltunen / Codeberg hiltsu</p> <h3>MIKÄ ON CRYPTOLEAF?</h3> <p>Cryptoleaf on steganografiatyökalu, joka piilottaa salattuja viestejä kuva- ja äänitiedostoihin siten, että tiedostot näyttävät ja kuulostavat täysin normaaleilta.</p> <h3>KÄYTTÖTARKOITUKSET</h3> <ul> <li><b>Turvallinen viestintä</b> – piilota viesti kuvan sisään</li> <li><b>Vesileimaus</b> – merkitse kuvat omistajuustiedoilla</li> <li><b>Metatietojen upotus</b> – lisää piilotettua kontekstitietoa kuviin</li> <li><b>Digitaalinen todistusaineisto</b> – piilota aikaleima tai tunniste kuvaan</li> </ul> <h3>TEKNISET MENETELMÄT</h3> <ul> <li><b>Kuva (PNG/BMP/WEBP):</b> DWT + spread spectrum + Reed-Solomon virheenkorjaus</li> <li><b>Kuva (JPEG):</b> Lohkopohjainen luminanssimenetelmä + Hamming(7,4) + 3× replikointi</li> <li><b>Ääni (WAV/MP3/FLAC):</b> Spread spectrum taajuussuodatuksella + Reed-Solomon</li> <li><b>Salaus:</b> AES-256-CBC + PBKDF2-HMAC-SHA256 (200 000 iteraatiota)</li> </ul> <h3>HUOMIO JPEG-KUVISTA</h3> <p>JPEG-pakkaus on häviöllistä. Suositellaan aina avaamaan salattu JPEG-tiedosto ja varmistamaan purun onnistuminen ennen tiedoston lähettämistä.</p> <h3>VANHA VERSIO</h3> <p>Vanha toimiva versio (v0.1.1) binääreineen:
- <a href="https://codeberg.org/hiltsu/old_v0.1_steganography_encrypter_decrypter"> https://codeberg.org/hiltsu/old_v0.1_steganography_encrypter_decrypter</a></p>
-
-
-
+<p>
+Project documentation, source code and issue tracking:
+<a href="https://github.com/ollavarma-create/cryptoleaf">
+github.com/ollavarma-create/cryptoleaf
+</a>
+</p>
 """
 
 
