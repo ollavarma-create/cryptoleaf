@@ -26,3 +26,43 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Cryptoleaf generated batch outputs
+/batch_output*/
+/benchmark_single/
+/benchmark_lossless/
+
+# Cryptoleaf local benchmark image datasets
+/benchmark_images/
+
+# Cryptoleaf generated benchmark reports
+/benchmark_results.csv
+/jpeg_reliability.csv
+
+# Cryptoleaf temporary test outputs
+/test_roundtrip.jpg
+
+# Local test datasets
+/test_images/
+/testitiedostoja/
+
+# Legacy development scripts
+/batch_encode_legacy.py
+
+# Local research results
+/*.csv
+/fourier_pilot_*.png
+/optimized_photo.jpg
+/test_photo.jpg
+
+# Local research datasets and generated files
+/benchmark_*/
+/batch_output*/
+# Legacy binary distribution directory (do not commit)
+/Distit/
+
+# Locally created source archives
+/*.zip
+
+# Local directory listings
+/tiedostot.txt

@@ -1,6 +1,6 @@
-# Copyright (c) 2026 Jari Hiltunen / Codeberg hiltsu
+# Copyright (c) 2026 Jari Hiltunen
 #
-# Steganography Tool v0.2.1 – PyQt6 GUI
+# Steganography Tool v0.3-dev – PyQt6 GUI
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -43,7 +43,9 @@ from reedsolo import ReedSolomonError
 from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QPixmap
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QGridLayout,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -51,6 +53,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -66,12 +69,20 @@ from PyQt6.QtWidgets import (
 from .audio_decoder import decode_audio, BadAudioMagicError
 from .audio_encoder import encode_audio, capacity_bits_audio
 from .image_decoder import decode_image, BadMagicError
-from .image_encoder import encode_image, capacity_bits
+from .image_encoder import encode_image, capacity_bits, CapacityError
+from .jpeg_optimizer import optimize_jpeg
+from .batch_processor import process_batch, write_report
+from .jpeg_v03 import required_blocks
+from .robust_service import encode_message as encode_robust_message, decode_message as decode_robust_message, MAX_MESSAGE_BYTES
+from .robust_image import MessageNotFoundError
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 def _friendly_decode_error(exc: Exception, has_password: bool) -> str:
     """Translate a low-level decode exception to a user-readable string."""
+    if isinstance(exc, MessageNotFoundError):
+        return "No hidden Cryptoleaf message found in this image."
     if isinstance(exc, (BadMagicError, BadAudioMagicError)):
         return "No hidden message found, or the file is corrupt."
     if isinstance(exc, ReedSolomonError):
@@ -86,7 +97,7 @@ def _friendly_decode_error(exc: Exception, has_password: bool) -> str:
 
 _APP_ORG = "hiltsu"
 _APP_NAME = "Cryptoleaf"
-_VERSION = "v0.2.1"
+_VERSION = "v0.3-dev"
 
 # Alpha slider: int values 1–50 map to 0.1–5.0 (multiply by 0.1).
 _SLIDER_DEFAULT = 10  # → 1.0
@@ -144,6 +155,84 @@ class _ImageEncodeWorker(QThread):
         except Exception as exc:
             logger.error("Image encoding failed: %s", exc)
             self.error.emit(str(exc))
+
+
+class _JpegOptimizeWorker(QThread):
+    """Optimize, save and verify a JPEG entirely off the GUI thread."""
+
+    finished = pyqtSignal(object)  # OptimizationResult
+    error = pyqtSignal(str)
+    capacity_error = pyqtSignal(str)
+
+    def __init__(self, cover_path: str, output_path: str,
+                 payload: bytes, password: str) -> None:
+        super().__init__()
+        self._cover_path = cover_path
+        self._output_path = output_path
+        self._payload = payload
+        self._password = password
+
+    def run(self) -> None:
+        try:
+            result = optimize_jpeg(
+                self._cover_path, self._output_path,
+                self._payload, self._password,
+                quality=85, mode="first_success",
+            )
+            self.finished.emit(result)
+        except CapacityError as exc:
+            logger.info("JPEG capacity exceeded: %s", exc)
+            self.capacity_error.emit(str(exc))
+        except Exception as exc:
+            logger.exception("JPEG optimization failed")
+            self.error.emit(f"{type(exc).__name__}: {exc}")
+
+
+class _RobustEncodeWorker(QThread):
+    """Encrypt, embed, persist and verify without blocking Qt."""
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(self, cover_path: str, output_path: str, message: bytes,
+                 password: str, output_format: str) -> None:
+        super().__init__()
+        self.cover_path = cover_path
+        self.output_path = output_path
+        self.message = message
+        self.password = password
+        self.output_format = output_format
+
+    def run(self) -> None:
+        try:
+            encode_robust_message(self.cover_path, self.message, self.password,
+                                  self.output_path, self.output_format)
+            self.finished.emit(self.output_path)
+        except Exception as exc:
+            logger.exception("Robust image encoding failed")
+            self.error.emit(f"{type(exc).__name__}: {exc}")
+
+
+class _RobustDecodeWorker(QThread):
+    finished = pyqtSignal(bytes)
+    error = pyqtSignal(str)
+
+    def __init__(self, stego_path: str, password: str) -> None:
+        super().__init__()
+        self.stego_path = stego_path
+        self.password = password
+
+    def run(self) -> None:
+        try:
+            self.finished.emit(decode_robust_message(self.stego_path, self.password, should_cancel=self.isInterruptionRequested))
+        except MessageNotFoundError as exc:
+            logger.debug("Robust image: %s", exc)
+            self.error.emit(_friendly_decode_error(exc, bool(self.password)))
+        except InterruptedError:
+            logger.debug("Robust extraction cancelled")
+            self.error.emit("Extraction cancelled.")
+        except Exception as exc:
+            logger.exception("Unexpected robust image decoding failure")
+            self.error.emit(_friendly_decode_error(exc, bool(self.password)))
 
 
 class _ImageDecodeWorker(QThread):
@@ -384,8 +473,14 @@ class ImageTab(QWidget):
 
         self._password_edit = QLineEdit()
         self._password_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self._password_edit.setPlaceholderText("Leave empty for no encryption")
+        self._password_edit.setPlaceholderText("Password required for encryption")
         form.addRow("Password:", self._password_edit)
+
+        self._mode_combo = QComboBox()
+        self._mode_combo.addItem("Robust – short encrypted messages", "robust")
+        self._mode_combo.addItem("Capacity – lossless LSB / legacy decode", "capacity")
+        self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        form.addRow("Image mode:", self._mode_combo)
 
         self._format_combo = QComboBox()
         self._format_combo.addItems(self._FORMAT_OPTIONS)
@@ -393,8 +488,8 @@ class ImageTab(QWidget):
         form.addRow("Output format:", self._format_combo)
 
         self._jpeg_warning = QLabel(
-            "JPEG-kuva tallennetaan laadulla 85. Käytetään lohkopohjaista "
-            "luminanssimenetelmää joka on optimoitu JPEG-pakkaukselle."
+            "JPEG v0.3: automatic strength optimization (quality 85). "
+            "A password is required; the saved file is verified by decoding."
         )
         self._jpeg_warning.setWordWrap(True)
         self._jpeg_warning.setStyleSheet("color: #b85c00;")
@@ -402,22 +497,10 @@ class ImageTab(QWidget):
         form.addRow("", self._jpeg_warning)
 
         right.addLayout(form)
+        self._on_mode_changed()
 
-        # Alpha slider (hidden when JPEG is selected – strength is fixed for Method B)
-        alpha_row = QHBoxLayout()
-        self._alpha_lbl = QLabel("Embedding strength:")
-        self._alpha_lbl.setToolTip(_ALPHA_TOOLTIP)
-        alpha_row.addWidget(self._alpha_lbl)
-        self._alpha_slider = QSlider(Qt.Orientation.Horizontal)
-        self._alpha_slider.setRange(1, 50)
-        saved = self._settings.value("image/alpha_int", _SLIDER_DEFAULT, int)
-        self._alpha_slider.setValue(saved)
-        self._alpha_slider.setToolTip(_ALPHA_TOOLTIP)
-        self._alpha_val_label = QLabel(f"{saved * 0.1:.1f}")
-        self._alpha_slider.valueChanged.connect(self._on_alpha_changed)
-        alpha_row.addWidget(self._alpha_slider)
-        alpha_row.addWidget(self._alpha_val_label)
-        right.addLayout(alpha_row)
+        # Image embedding strength is selected automatically for JPEG;
+        # the lossless LSB path does not use alpha.
 
         # Progress bar (indeterminate; hidden when idle)
         self._progress = QProgressBar()
@@ -433,7 +516,11 @@ class ImageTab(QWidget):
         self._extract_btn.clicked.connect(self._extract_message)
         btn_row.addWidget(self._hide_btn)
         btn_row.addWidget(self._extract_btn)
+        self._cancel_btn = QPushButton("Cancel extraction")
+        self._cancel_btn.setVisible(False)
+        self._cancel_btn.clicked.connect(self._cancel_extraction)
         right.addLayout(btn_row)
+        right.addWidget(self._cancel_btn)
 
         # Result area
         right.addWidget(QLabel("Extracted message:"))
@@ -462,6 +549,10 @@ class ImageTab(QWidget):
         self._file_path = path
         self._settings.setValue("last_dir", str(Path(path).parent))
         self._drop_area.set_filename(Path(path).name)
+        source_fmt = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG",
+                      ".bmp": "BMP", ".webp": "WEBP"}.get(Path(path).suffix.lower())
+        if source_fmt:
+            self._format_combo.setCurrentText(source_fmt)
         self._update_thumbnail(path)
         self._update_capacity(path)
         self._update_exif(path)
@@ -480,19 +571,61 @@ class ImageTab(QWidget):
             self._thumbnail.clear()
             self._thumbnail.setText("Preview unavailable")
 
+    def _is_robust(self) -> bool:
+        return self._mode_combo.currentData() == "robust"
+
+    def _on_mode_changed(self, _index: int = 0) -> None:
+        robust = self._is_robust()
+        self._password_edit.setPlaceholderText(
+            "Password required for encryption" if robust else "Leave empty for no encryption"
+        )
+        self._jpeg_warning.setVisible(not robust and self._format_combo.currentText() == "JPEG")
+        self._jpeg_warning.setText(
+            "Capacity mode cannot encode JPEG. Select PNG, BMP or WebP "
+            "(lossless), or switch to Robust. Legacy JPEG extraction is still available."
+        )
+        if self._file_path:
+            self._update_capacity(self._file_path)
+        else:
+            self._update_remaining()
+
+    def _jpeg_block_counts(self) -> tuple[int, int]:
+        """Return (required, available) using the v0.3 encoder's exact rules."""
+        with Image.open(self._file_path) as image:
+            width, height = image.size
+        available = (width // 8) * max(0, height // 8 - 1)
+        message_size = len(self._message_edit.toPlainText().encode("utf-8"))
+        return required_blocks(message_size), available
+
     def _update_capacity(self, path: str) -> None:
         try:
             fmt = self._format_combo.currentText()
-            bits = capacity_bits(path, output_format=fmt)
-            # JPEG Method B: 32-byte header overhead (no RS).
-            # Lossless LSB: ~64 bytes (RS-encoded 32-byte header).
-            header_overhead = 32 if fmt == "JPEG" else 64
-            usable = max(0, bits // 8 - header_overhead)
-            self._current_capacity = usable
-            self._capacity_label.setText(f"Capacity: ~{usable:,} bytes available")
+            if self._is_robust():
+                self._current_capacity = MAX_MESSAGE_BYTES
+                self._capacity_label.setText(
+                    f"Robust: up to {MAX_MESSAGE_BYTES} UTF-8 bytes (image-dependent)"
+                )
+                self._capacity_label.setStyleSheet("")
+            elif fmt == "JPEG":
+                needed, available = self._jpeg_block_counts()
+                self._current_capacity = 0  # JPEG uses blocks, not LSB bytes
+                self._capacity_label.setText(
+                    f"JPEG v0.3: {available:,} blocks available; "
+                    f"{needed:,} required for current message"
+                )
+                self._capacity_label.setStyleSheet(
+                    "color: #b00020;" if needed > available else ""
+                )
+            else:
+                bits = capacity_bits(path, output_format=fmt)
+                usable = max(0, bits // 8 - 64)
+                self._current_capacity = usable
+                self._capacity_label.setText(f"Capacity: ~{usable:,} bytes available")
+                self._capacity_label.setStyleSheet("")
         except Exception as exc:
             self._current_capacity = 0
             self._capacity_label.setText("Capacity: unknown")
+            self._capacity_label.setStyleSheet("")
             logger.warning("Capacity check failed for '%s': %s", path, exc)
         self._update_remaining()
 
@@ -506,6 +639,22 @@ class ImageTab(QWidget):
         used = len(self._message_edit.toPlainText().encode("utf-8"))
         cap = self._current_capacity
         left = cap - used
+        if not self._is_robust() and self._format_combo.currentText() == "JPEG":
+            if self._file_path:
+                try:
+                    needed, available = self._jpeg_block_counts()
+                    self._capacity_label.setText(
+                        f"JPEG v0.3: {available:,} blocks available; "
+                        f"{needed:,} required for current message"
+                    )
+                    self._capacity_label.setStyleSheet(
+                        "color: #b00020;" if needed > available else ""
+                    )
+                except Exception as exc:
+                    logger.warning("JPEG capacity check failed: %s", exc)
+            self._remaining_label.setText(f"Message: {used:,} bytes")
+            self._remaining_label.setStyleSheet("")
+            return
         self._remaining_label.setText(f"{left:,} bytes remaining")
         if cap == 0:
             color = ""
@@ -517,26 +666,14 @@ class ImageTab(QWidget):
             color = "color: #e63946;"
         self._remaining_label.setStyleSheet(color)
 
-    # --- Alpha slider -----------------------------------------------------------
+    # --- Output format -----------------------------------------------------------
 
     def _on_format_changed(self, fmt: str) -> None:
-        is_jpeg = fmt == "JPEG"
-        self._jpeg_warning.setVisible(is_jpeg)
-        # JPEG Method B uses a fixed strength (25); alpha slider has no effect
-        self._alpha_lbl.setVisible(not is_jpeg)
-        self._alpha_slider.setVisible(not is_jpeg)
-        self._alpha_val_label.setVisible(not is_jpeg)
+        self._jpeg_warning.setVisible(not self._is_robust() and fmt == "JPEG")
         if self._file_path:
             self._update_capacity(self._file_path)
         else:
             self._update_remaining()
-
-    def _on_alpha_changed(self, value: int) -> None:
-        self._alpha_val_label.setText(f"{value * 0.1:.1f}")
-        self._settings.setValue("image/alpha_int", value)
-
-    def _alpha_float(self) -> float:
-        return self._alpha_slider.value() * 0.1
 
     # --- Encode / decode actions ------------------------------------------------
 
@@ -550,6 +687,34 @@ class ImageTab(QWidget):
             return
 
         fmt = self._format_combo.currentText()
+        if self._is_robust():
+            if not self._password_edit.text():
+                QMessageBox.warning(self, "Password required", "Robust mode requires a password.")
+                return
+            size = len(message.encode("utf-8"))
+            if size > MAX_MESSAGE_BYTES:
+                QMessageBox.warning(self, "Message too long",
+                                    f"Robust mode allows at most {MAX_MESSAGE_BYTES} UTF-8 bytes; got {size}.")
+                return
+        elif fmt == "JPEG":
+            QMessageBox.warning(self, "Unsupported output format",
+                                "Capacity mode requires PNG, BMP or lossless WebP. "
+                                "Use Robust mode for JPEG.")
+            return
+        if not self._is_robust() and fmt == "JPEG" and not self._password_edit.text():
+            QMessageBox.warning(self, "Password required", "JPEG v0.3 requires a password.")
+            return
+        if not self._is_robust() and fmt == "JPEG":
+            try:
+                needed, available = self._jpeg_block_counts()
+            except Exception as exc:
+                QMessageBox.warning(self, "Cannot inspect image", str(exc))
+                return
+            if needed > available:
+                self._show_jpeg_capacity_error(
+                    f"JPEG v0.3 requires {needed} blocks, but image has {available}"
+                )
+                return
         last_dir = self._settings.value("last_dir", "", str)
         out_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -565,8 +730,37 @@ class ImageTab(QWidget):
         if not out_path.lower().endswith(suffix):
             out_path += suffix
 
+        if Path(out_path).resolve() == Path(self._file_path).resolve():
+            self.status_message.emit("Output file must differ from the source image.")
+            return
+
         self._pending_out_path = out_path
         self._pending_fmt = fmt
+
+        if self._is_robust():
+            self._set_busy(True)
+            self.status_message.emit("Embedding, saving and verifying robust image…")
+            self._worker = _RobustEncodeWorker(
+                self._file_path, out_path, message.encode("utf-8"),
+                self._password_edit.text(), fmt,
+            )
+            self._worker.finished.connect(self._on_robust_done)
+            self._worker.error.connect(self._on_worker_error)
+            self._worker.start()
+            return
+
+        if fmt == "JPEG":
+            self._set_busy(True)
+            self.status_message.emit("Optimizing and verifying JPEG…")
+            self._worker = _JpegOptimizeWorker(
+                self._file_path, out_path, message.encode("utf-8"),
+                self._password_edit.text(),
+            )
+            self._worker.finished.connect(self._on_jpeg_done)
+            self._worker.capacity_error.connect(self._show_jpeg_capacity_error)
+            self._worker.error.connect(self._on_worker_error)
+            self._worker.start()
+            return
 
         self._set_busy(True)
         self.status_message.emit("Embedding message…")
@@ -574,12 +768,33 @@ class ImageTab(QWidget):
             self._file_path,
             message.encode("utf-8"),
             self._password_edit.text(),
-            self._alpha_float(),
+            1.0,  # ignored by the lossless LSB encoder
             fmt,
         )
         self._worker.finished.connect(self._on_encode_done)
         self._worker.error.connect(self._on_worker_error)
         self._worker.start()
+
+    def _on_robust_done(self, output_path: str) -> None:
+        self._set_busy(False)
+        self.status_message.emit(f"Saved and verified: {Path(output_path).name}")
+
+    def _show_jpeg_capacity_error(self, message: str) -> None:
+        self._set_busy(False)
+        friendly = (
+            "This image is too small for the JPEG v0.3 message.\n\n"
+            + message + "\n\nUse a larger image or shorten the message."
+        )
+        self.status_message.emit("JPEG image capacity exceeded.")
+        QMessageBox.warning(self, "JPEG capacity exceeded", friendly)
+
+    def _on_jpeg_done(self, result: object) -> None:
+        self._set_busy(False)
+        self.status_message.emit(
+            f"Saved verified JPEG: {result.output_path.name} "
+            f"(strength={result.strength}, attempts={result.attempts}, "
+            f"PSNR={result.psnr:.2f} dB)"
+        )
 
     def _on_encode_done(self, result: object) -> None:
         self._set_busy(False)
@@ -618,12 +833,24 @@ class ImageTab(QWidget):
         self._result_edit.clear()
         self._set_busy(True)
         self.status_message.emit("Extracting message…")
-        self._worker = _ImageDecodeWorker(
-            self._file_path, self._password_edit.text()
-        )
+        if self._is_robust():
+            if not self._password_edit.text():
+                self._set_busy(False)
+                QMessageBox.warning(self, "Password required", "Robust mode requires a password.")
+                return
+            self._worker = _RobustDecodeWorker(self._file_path, self._password_edit.text())
+        else:
+            self._worker = _ImageDecodeWorker(self._file_path, self._password_edit.text())
         self._worker.finished.connect(self._on_decode_done)
         self._worker.error.connect(self._on_worker_error)
+        self._cancel_btn.setVisible(isinstance(self._worker, _RobustDecodeWorker))
         self._worker.start()
+
+    def _cancel_extraction(self) -> None:
+        if isinstance(self._worker, _RobustDecodeWorker) and self._worker.isRunning():
+            self._worker.requestInterruption()
+            self._cancel_btn.setEnabled(False)
+            self.status_message.emit("Cancelling extraction after current candidate…")
 
     def _on_decode_done(self, data: bytes) -> None:
         self._set_busy(False)
@@ -662,9 +889,197 @@ class ImageTab(QWidget):
         self.status_message.emit(f"Error: {message}")
 
     def _set_busy(self, busy: bool) -> None:
+        self._cancel_btn.setVisible(busy and isinstance(self._worker, _RobustDecodeWorker))
+        self._cancel_btn.setEnabled(True)
         self._progress.setVisible(busy)
         self._hide_btn.setEnabled(not busy)
         self._extract_btn.setEnabled(not busy)
+
+
+# ---------------------------------------------------------------------------
+# Batch tab
+# ---------------------------------------------------------------------------
+
+
+class _BatchWorker(QThread):
+    progress = pyqtSignal(object, int, int)
+    completed = pyqtSignal(object, str)
+    error = pyqtSignal(str)
+
+    def __init__(self, input_dir: str, output_dir: str, payload: bytes,
+                 password: str, dry_run: bool, skip_existing: bool) -> None:
+        super().__init__()
+        self.input_dir = input_dir
+        self.output_dir = output_dir
+        self.payload = payload
+        self.password = password
+        self.dry_run = dry_run
+        self.skip_existing = skip_existing
+
+    def run(self) -> None:
+        try:
+            results = process_batch(
+                self.input_dir, self.output_dir, self.payload, self.password,
+                dry_run=self.dry_run, skip_existing=self.skip_existing,
+                on_progress=lambda result, done, total: self.progress.emit(result, done, total),
+            )
+            report = ""
+            if not self.dry_run:
+                folder = Path(self.output_dir)
+                # write_report uses exclusive creation; keep prior reports intact.
+                for number in range(1, 10001):
+                    filename = "batch_report.csv" if number == 1 else f"batch_report_{number}.csv"
+                    try:
+                        report = str(write_report(results, folder / filename))
+                        break
+                    except FileExistsError:
+                        continue
+                else:
+                    raise FileExistsError("No free CSV report filename available")
+            self.completed.emit(results, report)
+        except Exception as exc:
+            logger.exception("Batch processing failed")
+            self.error.emit(f"{type(exc).__name__}: {exc}")
+
+
+class BatchTab(QWidget):
+    """Batch image encoding with per-image progress in a background thread."""
+
+    status_message = pyqtSignal(str)
+
+    def __init__(self, settings: QSettings, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._settings = settings
+        self._worker: _BatchWorker | None = None
+        self._counts = {"OK": 0, "SKIPPED": 0, "FAIL": 0, "DRY_RUN": 0}
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self)
+        form = QGridLayout()
+        self._input = QLineEdit()
+        self._output = QLineEdit()
+        for index, (title, field, handler) in enumerate((
+            ("Input folder:", self._input, self._choose_input),
+            ("Output folder:", self._output, self._choose_output),
+        )):
+            form.addWidget(QLabel(title), index, 0)
+            form.addWidget(field, index, 1)
+            button = QPushButton("Browse…")
+            button.clicked.connect(handler)
+            form.addWidget(button, index, 2)
+        root.addLayout(form)
+        root.addWidget(QLabel("Message to hide in every image:"))
+        self._message = QPlainTextEdit()
+        self._message.setPlaceholderText("Enter a message for all images…")
+        self._message.setMaximumHeight(100)
+        root.addWidget(self._message)
+        password_row = QHBoxLayout()
+        password_row.addWidget(QLabel("Password:"))
+        self._password = QLineEdit()
+        self._password.setEchoMode(QLineEdit.EchoMode.Password)
+        password_row.addWidget(self._password)
+        root.addLayout(password_row)
+        options = QHBoxLayout()
+        self._skip = QCheckBox("Skip existing output files")
+        self._dry = QCheckBox("Dry run (no files written)")
+        options.addWidget(self._skip)
+        options.addWidget(self._dry)
+        options.addStretch()
+        root.addLayout(options)
+        self._start = QPushButton("Start batch encoding")
+        self._start.clicked.connect(self._start_batch)
+        root.addWidget(self._start)
+        self._progress = QProgressBar()
+        self._progress.setRange(0, 1)
+        self._progress.setValue(0)
+        root.addWidget(self._progress)
+        self._summary = QLabel("Ready — 0 images processed")
+        root.addWidget(self._summary)
+        root.addWidget(QLabel("Results:"))
+        self._results = QPlainTextEdit()
+        self._results.setReadOnly(True)
+        root.addWidget(self._results, 1)
+        self._report = QLabel("")
+        self._report.setWordWrap(True)
+        root.addWidget(self._report)
+
+    def _choose_input(self) -> None:
+        path = QFileDialog.getExistingDirectory(
+            self, "Select input folder", self._settings.value("last_dir", "", str))
+        if path:
+            self._input.setText(path)
+            self._settings.setValue("last_dir", path)
+
+    def _choose_output(self) -> None:
+        path = QFileDialog.getExistingDirectory(
+            self, "Select output folder", self._settings.value("last_dir", "", str))
+        if path:
+            self._output.setText(path)
+
+    def _start_batch(self) -> None:
+        source_text = self._input.text().strip()
+        output_text = self._output.text().strip()
+        source = Path(source_text).expanduser().resolve() if source_text else None
+        destination = Path(output_text).expanduser().resolve() if output_text else None
+        if source is None or not source.is_dir():
+            QMessageBox.warning(self, "Input folder", "Select an existing input folder.")
+            return
+        if destination is None:
+            QMessageBox.warning(self, "Output folder", "Select an output folder.")
+            return
+        if source == destination or source in destination.parents:
+            QMessageBox.warning(self, "Output folder", "Output folder must not be inside the input folder.")
+            return
+        message = self._message.toPlainText()
+        if not message.strip():
+            QMessageBox.warning(self, "Message required", "Enter a message to hide.")
+            return
+        if not self._password.text():
+            QMessageBox.warning(self, "Password required", "Batch JPEG v0.3 requires a password.")
+            return
+        self._counts = {"OK": 0, "SKIPPED": 0, "FAIL": 0, "DRY_RUN": 0}
+        self._results.clear()
+        self._report.clear()
+        self._progress.setRange(0, 0)
+        self._summary.setText("Scanning input folder…")
+        self._start.setEnabled(False)
+        self._worker = _BatchWorker(
+            str(source), str(destination), message.encode("utf-8"),
+            self._password.text(), self._dry.isChecked(), self._skip.isChecked(),
+        )
+        self._worker.progress.connect(self._on_progress)
+        self._worker.completed.connect(self._on_completed)
+        self._worker.error.connect(self._on_error)
+        self._worker.start()
+        self.status_message.emit("Batch encoding started…")
+
+    def _on_progress(self, item: object, done: int, total: int) -> None:
+        self._counts[item.status] = self._counts.get(item.status, 0) + 1
+        self._progress.setRange(0, max(1, total))
+        self._progress.setValue(done)
+        detail = f" — {item.error}" if item.error else ""
+        self._results.appendPlainText(f"{item.status:8} {item.image}{detail}")
+        self._summary.setText(
+            f"{done}/{total} images | OK: {self._counts['OK']} | "
+            f"Skipped: {self._counts['SKIPPED']} | "
+            f"Failed: {self._counts['FAIL']} | Dry run: {self._counts['DRY_RUN']}"
+        )
+
+    def _on_completed(self, results: object, report: str) -> None:
+        self._start.setEnabled(True)
+        self._progress.setRange(0, max(1, len(results)))
+        self._progress.setValue(len(results))
+        self._report.setText(f"CSV report: {report}" if report else "Dry run: no report written")
+        self.status_message.emit(f"Batch completed: {len(results)} images.")
+
+    def _on_error(self, message: str) -> None:
+        self._start.setEnabled(True)
+        self._progress.setRange(0, 1)
+        self._progress.setValue(0)
+        self._results.appendPlainText(f"ERROR: {message}")
+        self.status_message.emit(f"Batch error: {message}")
+        QMessageBox.warning(self, "Batch encoding failed", message)
 
 
 # ---------------------------------------------------------------------------
@@ -814,6 +1229,11 @@ class AudioTab(QWidget):
 
     def _on_file_selected(self, path: str) -> None:
         self._file_path = path
+        source_format = {
+        ".wav": "WAV",
+        ".flac": "FLAC",
+        }.get(Path(path).suffix.lower(), "FLAC")
+        self._out_format_combo.setCurrentText(source_format)
         self._settings.setValue("last_dir", str(Path(path).parent))
         self._drop_area.set_filename(Path(path).name)
         self._update_info(path)
@@ -992,45 +1412,60 @@ class AudioTab(QWidget):
 # About tab
 # ---------------------------------------------------------------------------
 
-_ABOUT_TEXT = """\
-<h2>Cryptoleaf v0.2.1</h2>
-<p>Copyright &copy; 2026 Jari Hiltunen / Codeberg hiltsu</p>
 
-<h3>WHAT IS CRYPTOLEAF?</h3>
-<p>Cryptoleaf is a steganography tool that hides encrypted messages inside image and audio files in such a way that the files still look and sound completely normal.</p>
+_ABOUT_TEXT = f"""\
+<h2>Cryptoleaf {_VERSION}</h2>
+<p>Copyright &copy; 2026 Jari Hiltunen</p>
+<p><a href="https://github.com/ollavarma-create/cryptoleaf">GitHub – Cryptoleaf project</a></p>
 
-<h3>USE CASES</h3>
+<h3>ABOUT CRYPTOLEAF</h3>
+<p>
+Cryptoleaf is an open-source application for hiding messages in images and
+sound files. It provides a robust image mode for short, password-encrypted
+messages, alongside capacity-oriented and legacy-compatible methods.
+</p>
+
+<h3>FEATURES</h3>
 <ul>
-  <li><b>Secure communication</b> – hide a message inside an image</li>
-  <li><b>Watermarking</b> – embed ownership information into images</li>
-  <li><b>Metadata embedding</b> – add hidden contextual information to images</li>
-  <li><b>Digital evidence</b> – embed a timestamp or identifier into an image</li>
+  <li><b>Robust image mode:</b> embed short encrypted messages in supported
+      image formats, including JPEG, and verify the saved output.</li>
+  <li><b>Capacity image mode:</b> hide larger messages in lossless image formats;
+      supported legacy image extraction remains available.</li>
+  <li><b>Audio:</b> hide and extract messages in supported audio files.</li>
+  <li><b>Batch processing:</b> encode multiple images and review the results.</li>
 </ul>
 
 <h3>TECHNICAL METHODS</h3>
 <ul>
-  <li><b>Image (PNG/BMP/WEBP):</b> DWT + spread spectrum + Reed-Solomon error correction</li>
-  <li><b>Image (JPEG):</b> Block-based luminance method + Hamming(7,4) + 3× replication</li>
-  <li><b>Audio (WAV/MP3/FLAC):</b> Spread spectrum with frequency filtering + Reed-Solomon</li>
-  <li><b>Encryption:</b> AES-256-CBC + PBKDF2-HMAC-SHA256 (200,000 iterations)</li>
+  <li><b>Robust images:</b> Fourier-domain synchronization pilot,
+      Haar discrete wavelet transform (DWT), quantization index modulation
+      (QIM), repeated bits and Reed–Solomon error correction.</li>
+  <li><b>Robust encryption:</b> password-protected authenticated encryption
+      using AES-GCM.</li>
+  <li><b>Capacity and legacy modes:</b> separate image and audio embedding
+      methods, with compatibility for supported older files.</li>
 </ul>
 
-<h3>NOTE ABOUT JPEG IMAGES</h3>
-<p>JPEG compression is lossy. It is always recommended to open an encrypted JPEG file and verify successful extraction before sending the file.</p>
+<h3>IMPORTANT LIMITATIONS</h3>
+<p>
+Steganography does not guarantee that hidden data is undetectable.
+Embedding may introduce visible or audible artefacts. Lossy compression,
+resizing, editing, audio processing and format conversion can damage hidden
+data. Some image transformations are recoverable, but recovery is not guaranteed.
+</p>
+<p>Always verify successful extraction from the final carrier file before sharing it.</p>
 
-<h3>OLD VERSION</h3>
-<p>Old working version (v0.1.1) with binaries:<br>
-  <a href="https://codeberg.org/hiltsu/old_v0.1_steganography_encrypter_decrypter">https://codeberg.org/hiltsu/old_v0.1_steganography_encrypter_decrypter</a></p>
-
-Finnish / Suomi:
-
-<h2>Cryptoleaf v0.2.1</h2> <p>Copyright © 2026 Jari Hiltunen / Codeberg hiltsu</p> <h3>MIKÄ ON CRYPTOLEAF?</h3> <p>Cryptoleaf on steganografiatyökalu, joka piilottaa salattuja viestejä kuva- ja äänitiedostoihin siten, että tiedostot näyttävät ja kuulostavat täysin normaaleilta.</p> <h3>KÄYTTÖTARKOITUKSET</h3> <ul> <li><b>Turvallinen viestintä</b> – piilota viesti kuvan sisään</li> <li><b>Vesileimaus</b> – merkitse kuvat omistajuustiedoilla</li> <li><b>Metatietojen upotus</b> – lisää piilotettua kontekstitietoa kuviin</li> <li><b>Digitaalinen todistusaineisto</b> – piilota aikaleima tai tunniste kuvaan</li> </ul> <h3>TEKNISET MENETELMÄT</h3> <ul> <li><b>Kuva (PNG/BMP/WEBP):</b> DWT + spread spectrum + Reed-Solomon virheenkorjaus</li> <li><b>Kuva (JPEG):</b> Lohkopohjainen luminanssimenetelmä + Hamming(7,4) + 3× replikointi</li> <li><b>Ääni (WAV/MP3/FLAC):</b> Spread spectrum taajuussuodatuksella + Reed-Solomon</li> <li><b>Salaus:</b> AES-256-CBC + PBKDF2-HMAC-SHA256 (200 000 iteraatiota)</li> </ul> <h3>HUOMIO JPEG-KUVISTA</h3> <p>JPEG-pakkaus on häviöllistä. Suositellaan aina avaamaan salattu JPEG-tiedosto ja varmistamaan purun onnistuminen ennen tiedoston lähettämistä.</p> <h3>VANHA VERSIO</h3> <p>Vanha toimiva versio (v0.1.1) binääreineen:
- <a href="https://codeberg.org/hiltsu/old_v0.1_steganography_encrypter_decrypter"> https://codeberg.org/hiltsu/old_v0.1_steganography_encrypter_decrypter</a></p>
-
-
-
+<h3>DEVELOPMENT STATUS</h3>
+<p>
+Cryptoleaf is under active development. This development version is intended
+for testing and evaluation. It has not been independently security-audited
+and should not be relied upon for high-risk confidential communications.
+</p>
+<p>
+Source code, documentation and issue tracking:
+<a href="https://github.com/ollavarma-create/cryptoleaf">github.com/ollavarma-create/cryptoleaf</a>
+</p>
 """
-
 
 class AboutTab(QWidget):
     """Static About tab with application description and technical details."""
@@ -1126,6 +1561,10 @@ class MainWindow(QMainWindow):
         self._image_tab.status_message.connect(self._show_status)
         tabs.addTab(self._image_tab, "Image")
 
+        self._batch_tab = BatchTab(self._settings)
+        self._batch_tab.status_message.connect(self._show_status)
+        tabs.addTab(self._batch_tab, "Batch")
+
         self._audio_tab = AudioTab(self._settings)
         self._audio_tab.status_message.connect(self._show_status)
         tabs.addTab(self._audio_tab, "Audio")
@@ -1151,6 +1590,14 @@ class MainWindow(QMainWindow):
         # down the event loop.  Without this, Python's thread finaliser can
         # raise KeyboardInterrupt inside enum.py when the interpreter exits
         # while a QThread is still alive.
+        # A running batch cannot be interrupted safely by QThread.quit().
+        # Reject closing until it finishes to avoid destroying a live thread.
+        batch_worker = self._batch_tab._worker
+        if batch_worker is not None and batch_worker.isRunning():
+            QMessageBox.information(self, "Batch in progress",
+                                    "Wait for batch encoding to finish before closing Cryptoleaf.")
+            event.ignore()
+            return
         for tab in (self._image_tab, self._audio_tab):
             worker = getattr(tab, "_worker", None)
             if worker is not None and worker.isRunning():

@@ -1,6 +1,6 @@
-# Copyright (c) 2026 Jari Hiltunen / Codeberg hiltsu
+# Copyright (c) 2026 Jari Hiltunen
 #
-# Steganography Tool v0.2.1 – image steganography decoder
+# Cryptoleaf – image steganography decoder
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -45,6 +45,14 @@ from reedsolo import ReedSolomonError
 
 from .crypto import decrypt
 from .error_correction import rs_encode, rs_decode, hamming_decode
+
+from .jpeg_v03 import (
+    MAGIC as JPEG_V03_MAGIC,
+    parse_header,
+    recover_payload,
+)
+from .jpeg_interleave import deinterleave3
+
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +299,7 @@ def _extract_block_raw_bits(img: Image.Image) -> list[int]:
     Returns:
         List of 0/1 integers, one per available 8×8 block.
     """
-    ycbcr = np.array(img.convert("YCbCr"), dtype=np.float64)
+    ycbcr = np.asarray(img.convert("YCbCr"))
     h, w = ycbcr.shape[:2]
     bs = _BLOCK_SIZE
     cy = cx = bs // 2
@@ -333,65 +341,72 @@ def _majority_vote(bits: list[int]) -> list[int]:
 
 
 def _decode_image_block(img: Image.Image, password: str) -> bytes:
-    """Extract a payload embedded with Method B (block-luminance, STGB magic).
+    """Decode JPEG STGC v0.3 or legacy STGB v0.2."""
 
-    Two-pass decoding:
-      Pass 1 – header: read first 1344 raw bits, vote, Hamming-decode
-               → 32-byte STGB header, parse payload_len.
-      Pass 2 – payload: read next payload_len × 42 raw bits, vote,
-               Hamming-decode → encrypted payload bytes.
-
-    Args:
-        img: PIL Image (any mode).
-        password: AES password (empty = no decryption).
-
-    Returns:
-        Plaintext payload bytes.
-
-    Raises:
-        BadMagicError: STGB magic not found.
-        ValueError: Decryption fails (wrong password or corrupted data).
-    """
     raw_bits = _extract_block_raw_bits(img)
-    logger.debug("decode_image [Block]: extracted %d raw bits from blocks", len(raw_bits))
 
-    # --- Pass 1: decode header ---
     if len(raw_bits) < _HEADER_BLOCKS:
         raise BadMagicError(
-            f"Image too small for block-luminance header: "
-            f"need {_HEADER_BLOCKS} blocks, got {len(raw_bits)}."
+            "Image too small for JPEG block-luminance header"
         )
-    header_voted = _majority_vote(raw_bits[:_HEADER_BLOCKS])   # → 448 bits
-    header_bits = hamming_decode(header_voted)                   # → 256 bits
+
+    header_raw = raw_bits[:_HEADER_BLOCKS]
+
+    # First try the interleaved JPEG v0.3 header.
+    header_voted = deinterleave3(header_raw)
+    header_bits = hamming_decode(header_voted)
     header_bytes = _bits_to_bytes(header_bits)
 
-    logger.debug(
-        "decode_image [Block]: header raw first 16 hex: %s", header_bytes[:16].hex()
+    if header_bytes[:4] == JPEG_V03_MAGIC:
+        # A recognized STGC header must pass CRC validation.
+        payload_len = parse_header(header_bytes)
+        is_v03 = True
+
+    else:
+        # Legacy JPEG v0.2: adjacent triple repetition.
+        header_voted = _majority_vote(header_raw)
+        header_bits = hamming_decode(header_voted)
+        header_bytes = _bits_to_bytes(header_bits)
+
+        if header_bytes[:4] != _BLOCK_MAGIC:
+            raise BadMagicError(
+                f"Unknown JPEG block magic: {header_bytes[:4]!r}"
+            )
+
+        payload_len = struct.unpack_from(
+            ">I", header_bytes, 4
+        )[0]
+        is_v03 = False
+
+    start = _HEADER_BLOCKS
+    end = start + payload_len * _BLOCKS_PER_BYTE
+
+    if end > len(raw_bits):
+        raise BadMagicError(
+            f"Declared payload requires {end} blocks, "
+            f"but image contains only {len(raw_bits)}"
+        )
+
+    payload_raw = raw_bits[start:end]
+
+    if is_v03:
+        payload_voted = deinterleave3(payload_raw)
+    else:
+        payload_voted = _majority_vote(payload_raw)
+
+    payload_bits = hamming_decode(payload_voted)
+    encoded_payload = _bits_to_bytes(payload_bits)
+
+    if is_v03:
+        if not password:
+            raise ValueError("JPEG v0.3 requires a password")
+
+        return recover_payload(encoded_payload, password)
+
+    return _decrypt_if_needed(
+        encoded_payload, password, "Block"
     )
 
-    if header_bytes[:4] != _BLOCK_MAGIC:
-        raise BadMagicError(
-            f"STGB magic not found – got {header_bytes[:4]!r}. "
-            "Image was not encoded with Method B."
-        )
-
-    payload_len = struct.unpack_from(">I", header_bytes, 4)[0]
-    logger.debug("decode_image [Block]: payload_len=%d bytes", payload_len)
-
-    # --- Pass 2: decode payload ---
-    payload_raw_count = payload_len * _BLOCKS_PER_BYTE   # payload_len × 42
-    start = _HEADER_BLOCKS
-    end = start + payload_raw_count
-    if len(raw_bits) < end:
-        raise BadMagicError(
-            f"Stego image too small to hold declared payload of {payload_len} bytes "
-            f"(need {end} blocks, have {len(raw_bits)})."
-        )
-    payload_voted = _majority_vote(raw_bits[start:end])   # → payload_len × 14 bits
-    payload_bits = hamming_decode(payload_voted)           # → payload_len × 8 bits
-    encrypted_payload = _bits_to_bytes(payload_bits)
-
-    return _decrypt_if_needed(encrypted_payload, password, "Block")
 
 
 # ---------------------------------------------------------------------------
