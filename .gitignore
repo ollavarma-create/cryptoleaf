@@ -48,3 +48,20 @@ Thumbs.db
 
 # Legacy development scripts
 /batch_encode_legacy.py
+
+# Local research results
+/*.csv
+/fourier_pilot_*.png
+/optimized_photo.jpg
+/test_photo.jpg
+
+# Local research datasets and generated files
+/benchmark_*/
+/batch_output*/
+/Distit/
+
+# Locally created source archives
+/*.zip
+
+# Local directory listings
+/tiedostot.txt
