@@ -5,13 +5,28 @@ on:
     branches:
       - ci/appimage
       - feature/fourier-dwt-rs8
+      - main
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+      - 'assets/*.ico'
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+      - 'assets/*.ico'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Keep only the newest build for each branch or pull request.
+# workflow_dispatch is intentionally included in this grouping.
+concurrency:
+  group: appimage-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   linux-appimage:
