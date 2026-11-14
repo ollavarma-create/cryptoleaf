@@ -44,7 +44,7 @@ Thumbs.db
 
 # Local test datasets
 /test_images/
-/testitiedostoja/testijuttu_1.jpg
+/testitiedostoja/
 
 # Legacy development scripts
 /batch_encode_legacy.py
@@ -58,6 +58,7 @@ Thumbs.db
 # Local research datasets and generated files
 /benchmark_*/
 /batch_output*/
+# Legacy binary distribution directory (do not commit)
 /Distit/
 
 # Locally created source archives
