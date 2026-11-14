@@ -1,6 +1,6 @@
-# Copyright (c) 2026 Jari Hiltunen / Codeberg hiltsu
+# Copyright (c) 2026 Jari Hiltunen
 #
-# Steganography Tool v0.2.1 – AES-CBC encryption/decryption
+# Cryptoleaf – AES-CBC encryption/decryption
 #
 # Ported from endecrypter.py (StegaMachine._aes_encrypt / _aes_decrypt).
 # Do NOT rewrite the crypto logic – only adapt the interface to bytes.
