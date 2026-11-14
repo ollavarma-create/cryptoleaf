@@ -51,10 +51,10 @@ def encode_message(cover_path: str | Path, message: bytes, password: str,
         temporary.unlink(missing_ok=True)
 
 
-def decode_message(stego_path: str | Path, password: str) -> bytes:
+def decode_message(stego_path: str | Path, password: str, should_cancel=None) -> bytes:
     """Blindly recover and authenticate a robust message."""
     if not password:
         raise ValueError("Robust mode requires a password")
     with Image.open(stego_path) as source:
-        encrypted = extract_robust(source).payload
+        encrypted = extract_robust(source, should_cancel=should_cancel).payload
     return decrypt_gcm(encrypted, password)
