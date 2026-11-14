@@ -36,7 +36,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             xvfb xauth libgl1 libegl1 libxkbcommon-x11-0 \
-            libxcb-cursor0 libxcb-xinerama0 libfuse2 libsndfile1
+            libxcb-cursor0 libxcb-xinerama0 libxcb-keysyms1 \
+            libxcb-shape0 libxcb-icccm4 libxcb-image0 \
+            libxcb-render-util0 libxcb-xkb1 libfuse2 libsndfile1
 
       - name: Install Python dependencies
         run: |
@@ -48,6 +50,19 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m pytest tests/ -q
+
+      - name: Verify Qt XCB plugin dependencies
+        run: |
+          python - <<'PY'
+          import pathlib
+          from PyQt6.QtCore import QLibraryInfo
+          import subprocess
+          plugin = pathlib.Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath)) / "platforms/libqxcb.so"
+          result = subprocess.run(["ldd", str(plugin)], text=True, capture_output=True, check=True)
+          print(result.stdout)
+          if "not found" in result.stdout:
+              raise SystemExit("Qt XCB dependencies are missing before packaging")
+          PY
 
       - name: Build AppImage
         run: bash packaging/build-appimage.sh
