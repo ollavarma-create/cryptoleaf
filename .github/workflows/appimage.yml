@@ -51,7 +51,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            xvfb xauth libgl1 libegl1 libxkbcommon-x11-0 \
+            appstream xvfb xauth libgl1 libegl1 libxkbcommon-x11-0 \
             libxcb-cursor0 libxcb-xinerama0 libxcb-keysyms1 \
             libxcb-shape0 libxcb-icccm4 libxcb-image0 \
             libxcb-render-util0 libxcb-xkb1 libfuse2 libsndfile1
@@ -110,6 +110,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cryptoleaf-v0.3-dev-linux-x86_64
-          path: dist/Cryptoleaf-v0.3-dev-x86_64.AppImage
+          path: |
+            dist/Cryptoleaf-v0.3-dev-x86_64.AppImage
+            dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
