@@ -14,6 +14,10 @@ from .image_encoder import CapacityError, encode_image
 from .image_decoder import decode_image
 from .jpeg_optimizer import optimize_jpeg
 from .jpeg_v03 import message_fits, max_message_size
+from .robust_service import encode_message as encode_robust_message, MAX_MESSAGE_BYTES
+from .robust_image import REPEAT, MAX_LONGEST
+from .robust_packet import HEADER_BYTES, PARITY
+from PIL import ImageOps
 from PIL import Image
 
 FORMATS = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".bmp": "BMP", ".webp": "WEBP"}
@@ -57,6 +61,33 @@ def _check_legacy_capacity(cover: Path, fmt: str, payload: bytes, password: str)
             )
 
 
+def _check_robust_capacity(cover: Path, payload: bytes) -> None:
+    """Check the robust transport's maximum length and geometric LL2 capacity.
+
+    This is a necessary preflight, not a guarantee that the saved image will
+    survive JPEG recompression or pass the full robust round-trip check.
+    """
+    if len(payload) > MAX_MESSAGE_BYTES:
+        raise CapacityError(
+            f"Robust capacity exceeded: {len(payload)} bytes; maximum {MAX_MESSAGE_BYTES}"
+        )
+    with Image.open(cover) as image:
+        width, height = ImageOps.exif_transpose(image).size
+    scale = min(1.0, MAX_LONGEST / max(width, height))
+    if scale < 1.0:
+        width, height = (max(32, round(value * scale)) for value in (width, height))
+    # GCM adds 44 bytes. RS8 adds 8 parity bytes and a 4-byte CRC;
+    # CLR1 adds a 6-byte header. Each bit uses nine LL2 coefficients.
+    packet_bytes = HEADER_BYTES + len(payload) + 44 + PARITY + 4
+    needed = packet_bytes * 8 * REPEAT
+    available = ((height + 3) // 4) * ((width + 3) // 4)
+    if needed > available:
+        raise CapacityError(
+            f"Robust capacity exceeded: need {needed} LL2 coefficients, "
+            f"available {available} for {width}x{height}"
+        )
+
+
 def process_batch(
     input_dir: str | Path,
     output_dir: str | Path,
@@ -64,6 +95,7 @@ def process_batch(
     password: str,
     *,
     quality: int = 85,
+    mode: str = "legacy",
     dry_run: bool = False,
     skip_existing: bool = False,
     on_progress: Callable[[BatchResult, int, int], None] | None = None,
@@ -85,6 +117,8 @@ def process_batch(
         raise ValueError("A password is required for JPEG v0.3")
     if not 1 <= quality <= 100:
         raise ValueError("JPEG quality must be between 1 and 100")
+    if mode not in {"legacy", "robust"}:
+        raise ValueError("mode must be legacy or robust")
     if not isinstance(payload, bytes):
         raise TypeError("payload must be bytes")
 
@@ -106,8 +140,22 @@ def process_batch(
                 else:
                     raise FileExistsError(f"Output exists: {output}")
             elif dry_run:
-                _check_legacy_capacity(cover, fmt, payload, password)
+                if mode == "robust":
+                    _check_robust_capacity(cover, payload)
+                else:
+                    _check_legacy_capacity(cover, fmt, payload, password)
                 status = "DRY_RUN"
+            elif mode == "robust":
+                _check_robust_capacity(cover, payload)
+                # The robust service may replace its target. Always give it a
+                # private temporary target and publish via exclusive hard-link.
+                with NamedTemporaryFile(dir=destination, prefix=".cryptoleaf-", suffix=".tmp", delete=False) as temp:
+                    temp_path = Path(temp.name)
+                try:
+                    encode_robust_message(cover, payload, password, temp_path, output_format=fmt)
+                    os.link(temp_path, output)
+                finally:
+                    temp_path.unlink(missing_ok=True)
             elif fmt == "JPEG":
                 # Optimize into a private file, then publish atomically without overwrite.
                 with NamedTemporaryFile(dir=destination, prefix=".cryptoleaf-", suffix=".jpg", delete=False) as temp:
