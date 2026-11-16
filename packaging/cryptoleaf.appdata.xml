@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>cryptoleaf.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>CryptoLeaf</name>
+  <summary>Image and audio steganography application</summary>
+  <description>
+    <p>CryptoLeaf is an open-source desktop application for hiding and extracting information in images and audio files.</p>
+    <p>It includes legacy-compatible modes, experimental robust image steganography, and batch processing.</p>
+  </description>
+  <url type="homepage">https://github.com/ollavarma-create/cryptoleaf</url>
+  <url type="bugtracker">https://github.com/ollavarma-create/cryptoleaf/issues</url>
+  <launchable type="desktop-id">cryptoleaf.desktop</launchable>
+  <categories>
+    <category>Utility</category>
+    <category>Security</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+</component>
