@@ -69,6 +69,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .audio_decoder import decode_audio, BadAudioMagicError
+from .audio_service import save_verified_audio
 from .audio_encoder import encode_audio, capacity_bits_audio
 from .image_decoder import decode_image, BadMagicError
 from .image_encoder import encode_image, capacity_bits, CapacityError
@@ -1392,6 +1393,8 @@ class AudioTab(QWidget):
 
         self._pending_out_path = out_path
         self._pending_out_fmt = out_fmt
+        self._pending_audio_payload = message.encode("utf-8")
+        self._pending_audio_password = self._password_edit.text()
 
         self._set_busy(True)
         self.status_message.emit("Embedding message…")
@@ -1411,20 +1414,12 @@ class AudioTab(QWidget):
         out_path = self._pending_out_path
         out_fmt = self._pending_out_fmt
         try:
-            target = Path(out_path)
-            with NamedTemporaryFile(dir=target.parent, prefix=".cryptoleaf-", suffix=".tmp", delete=False) as temp:
-                temporary = Path(temp.name)
-            try:
-                sf.write(
-                    str(temporary),
-                    stego,
-                    sr,
-                    format=self._SF_FORMAT[out_fmt],
-                    subtype=self._SF_SUBTYPE[out_fmt],
-                )
-                os.link(temporary, target)  # never replace an existing audio file
-            finally:
-                temporary.unlink(missing_ok=True)
+            target = save_verified_audio(
+                out_path, stego, sr,
+                self._pending_audio_payload, self._pending_audio_password,
+                format=self._SF_FORMAT[out_fmt],
+                subtype=self._SF_SUBTYPE[out_fmt],
+            )
             self.status_message.emit(f"Saved: {target.name}")
         except Exception as exc:
             logger.error("Failed to save stego audio: %s", exc)
