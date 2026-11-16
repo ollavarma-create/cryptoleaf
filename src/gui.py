@@ -35,6 +35,8 @@ thread is never blocked.  Signals carry results back to the main thread.
 """
 
 import logging
+import os
+from tempfile import NamedTemporaryFile
 from pathlib import Path
 
 import numpy as np
@@ -865,7 +867,14 @@ class ImageTab(QWidget):
                 save_kwargs["quality"] = 85
             elif actual_fmt == "WEBP":
                 save_kwargs["lossless"] = True
-            img.save(out_path, **save_kwargs)  # type: ignore[union-attr]
+            target = Path(out_path)
+            with NamedTemporaryFile(dir=target.parent, prefix=".cryptoleaf-", suffix=".tmp", delete=False) as temp:
+                temporary = Path(temp.name)
+            try:
+                img.save(temporary, **save_kwargs)  # type: ignore[union-attr]
+                os.link(temporary, target)  # fail if output already exists
+            finally:
+                temporary.unlink(missing_ok=True)
             if requested_fmt == actual_fmt:
                 self.status_message.emit(f"Saved: {Path(out_path).name}")
             else:
