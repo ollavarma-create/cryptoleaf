@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build the development Cryptoleaf x86-64 AppImage.
-# Run from the repository root with Python dependencies and PyInstaller installed.
+# Build the development CryptoLeaf x86-64 AppImage with Nuitka.
+# Run from the repository root with dependencies and Nuitka installed.
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,18 +9,23 @@ cd "$ROOT"
 APPDIR="$ROOT/build/Cryptoleaf.AppDir"
 OUTPUT="$ROOT/dist/Cryptoleaf-v0.3-dev-x86_64.AppImage"
 TOOL="$ROOT/build/appimagetool-x86_64.AppImage"
+PYTHON="${PYTHON:-python}"
 
-python -m PyInstaller \
-    --noconfirm --clean --onedir --windowed \
-    --name Cryptoleaf \
-    --collect-all soundfile \
-    --collect-all pydub \
-    --collect-all pywt \
+"$PYTHON" -m nuitka \
+    --mode=standalone \
+    --enable-plugin=pyqt6 \
+    --include-package=soundfile \
+    --include-package=pydub \
+    --include-package=pywt \
+    --output-dir=dist \
+    --output-filename=Cryptoleaf \
+    --remove-output \
     Cryptoleaf.py
 
+test -x "$ROOT/dist/Cryptoleaf.dist/Cryptoleaf"
 rm -rf "$APPDIR"
-mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$ROOT/dist"
-cp -a "$ROOT/dist/Cryptoleaf/." "$APPDIR/usr/bin/"
+mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$APPDIR/usr/share/metainfo" "$APPDIR/usr/share/applications" "$ROOT/build"
+cp -a "$ROOT/dist/Cryptoleaf.dist/." "$APPDIR/usr/bin/"
 
 cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
@@ -30,7 +35,7 @@ exec "$HERE/usr/bin/Cryptoleaf" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
 
-cat > "$APPDIR/cryptoleaf.desktop" <<'EOF'
+cat > "$APPDIR/usr/share/applications/io.github.ollavarma-create.cryptoleaf.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
 Name=Cryptoleaf
@@ -41,15 +46,18 @@ Terminal=false
 Categories=Utility;Security;
 EOF
 
+ln -s "usr/share/applications/io.github.ollavarma-create.cryptoleaf.desktop" "$APPDIR/io.github.ollavarma-create.cryptoleaf.desktop"
+cp "$ROOT/packaging/cryptoleaf.appdata.xml" "$APPDIR/usr/share/metainfo/cryptoleaf.appdata.xml"
 cp "$ROOT/assets/icon.png" "$APPDIR/cryptoleaf.png"
 cp "$ROOT/assets/icon.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/cryptoleaf.png"
 
-# appimagetool is itself an AppImage. Extraction mode avoids dependence on FUSE
-# on GitHub-hosted runners.
-curl -fL --retry 3 --output "$TOOL" \
-  "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+# Extraction mode avoids requiring FUSE on GitHub-hosted runners.
+if [[ ! -s "$TOOL" ]]; then
+  curl -fL --retry 3 --output "$TOOL" \
+    "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+fi
 chmod +x "$TOOL"
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" "$APPDIR" "$OUTPUT"
 test -s "$OUTPUT"
 chmod +x "$OUTPUT"
-sha256sum "$OUTPUT"
+( cd "$ROOT/dist" && sha256sum "$(basename "$OUTPUT")" > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt )
