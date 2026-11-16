@@ -1,5 +1,7 @@
 """Automatic JPEG v0.3 embedding strength optimization."""
 import logging
+import os
+from tempfile import NamedTemporaryFile
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -20,6 +22,19 @@ class OptimizationResult:
     attempts: int
     output_path: Path
     psnr: float
+
+
+def _publish_exclusive(path: Path, data: bytes) -> None:
+    """Publish verified JPEG without replacing an existing output."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(dir=path.parent, prefix=".cryptoleaf-", suffix=".tmp", delete=False) as temp:
+        temporary = Path(temp.name)
+        try:
+            temp.write(data)
+            temp.flush()
+            os.link(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def optimize_jpeg(cover_path: str | Path, output_path: str | Path,
@@ -74,14 +89,12 @@ def optimize_jpeg(cover_path: str | Path, output_path: str | Path,
                 final_image.close()
             logger.debug("mode=%s strength=%s psnr=%.3f", mode, strength, psnr)
             if mode == "first_success":
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(candidate_path.read_bytes())
+                _publish_exclusive(output_path, candidate_path.read_bytes())
                 return OptimizationResult(strength, quality, attempt, output_path, psnr)
             if psnr > best_psnr:
                 best_psnr, best_strength = psnr, strength
                 best_data = candidate_path.read_bytes()
         if best_strength is not None:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(best_data)
+            _publish_exclusive(output_path, best_data)
             return OptimizationResult(best_strength, quality, len(candidates), output_path, best_psnr)
     raise ValueError("No embedding strength survived JPEG compression")
