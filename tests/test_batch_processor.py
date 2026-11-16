@@ -10,7 +10,7 @@ from src import batch_processor as batch
 def test_dry_run_does_not_create_outputs(tmp_path):
     src, out = tmp_path / 'input', tmp_path / 'output'
     src.mkdir()
-    (src / 'photo.jpg').write_bytes(b'not actually decoded in dry run')
+    Image.new('RGB', (1024, 1024)).save(src / 'photo.jpg')
     results = batch.process_batch(src, out, b'secret', 'password', dry_run=True)
     assert [r.status for r in results] == ['DRY_RUN']
     assert not out.exists()
@@ -116,3 +116,33 @@ def test_jpeg_failure_leaves_no_temp_files(tmp_path, monkeypatch):
     results = batch.process_batch(src, out, b'secret', 'password')
     assert results[0].status == 'FAIL'
     assert not list(out.iterdir())
+
+
+def test_dry_run_rejects_oversized_lossless_payload(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    Image.new("RGB", (16, 16)).save(source / "tiny.png")
+    output = tmp_path / "output"
+    result = batch.process_batch(source, output, b"x" * 1000, "password", dry_run=True)
+    assert result[0].status == "SKIPPED"
+    assert "capacity" in result[0].error.lower()
+    assert not output.exists()
+
+
+def test_dry_run_rejects_oversized_jpeg_payload(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    Image.new("RGB", (128, 128)).save(source / "tiny.jpg")
+    output = tmp_path / "output"
+    result = batch.process_batch(source, output, b"x" * 100, "password", dry_run=True)
+    assert result[0].status == "SKIPPED"
+    assert "capacity" in result[0].error.lower()
+    assert not output.exists()
+
+
+def test_dry_run_rejects_corrupt_image(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    (source / "bad.png").write_bytes(b"invalid")
+    result = batch.process_batch(source, tmp_path / "output", b"hello", "password", dry_run=True)
+    assert result[0].status == "FAIL"
