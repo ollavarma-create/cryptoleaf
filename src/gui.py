@@ -268,25 +268,26 @@ class _ImageDecodeWorker(QThread):
 
 
 class _AudioEncodeWorker(QThread):
-    """Runs encode_audio in a background thread.
+    """Encode, save, verify and publish audio entirely off the GUI thread."""
 
-    Signals:
-        finished: Emits ``(np.ndarray, samplerate)`` tuple on success.
-        error: Emits a human-readable error string on failure.
-    """
-
-    finished = pyqtSignal(object)  # tuple[np.ndarray, int]
+    finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
     def __init__(
         self,
         cover_path: str,
+        output_path: str,
+        output_format: str,
+        output_subtype: str,
         payload: bytes,
         password: str,
         alpha: float,
     ) -> None:
         super().__init__()
         self._cover_path = cover_path
+        self._output_path = output_path
+        self._output_format = output_format
+        self._output_subtype = output_subtype
         self._payload = payload
         self._password = password
         self._alpha = alpha
@@ -299,10 +300,19 @@ class _AudioEncodeWorker(QThread):
                 self._password,
                 self._alpha,
             )
-            self.finished.emit((stego, sr))
+            saved = save_verified_audio(
+                self._output_path,
+                stego,
+                sr,
+                self._payload,
+                self._password,
+                format=self._output_format,
+                subtype=self._output_subtype,
+            )
+            self.finished.emit(str(saved))
         except Exception as exc:
-            logger.error("Audio encoding failed: %s", exc)
-            self.error.emit(str(exc))
+            logger.exception("Audio encoding or verification failed")
+            self.error.emit(f"{type(exc).__name__}: {exc}")
 
 
 class _AudioDecodeWorker(QThread):
@@ -1391,15 +1401,13 @@ class AudioTab(QWidget):
             self.status_message.emit("Output file must differ from the source audio.")
             return
 
-        self._pending_out_path = out_path
-        self._pending_out_fmt = out_fmt
-        self._pending_audio_payload = message.encode("utf-8")
-        self._pending_audio_password = self._password_edit.text()
-
         self._set_busy(True)
-        self.status_message.emit("Embedding message…")
+        self.status_message.emit("Embedding, saving and verifying audio…")
         self._worker = _AudioEncodeWorker(
             self._file_path,
+            out_path,
+            self._SF_FORMAT[out_fmt],
+            self._SF_SUBTYPE[out_fmt],
             message.encode("utf-8"),
             self._password_edit.text(),
             self._alpha_float(),
@@ -1408,22 +1416,9 @@ class AudioTab(QWidget):
         self._worker.error.connect(self._on_worker_error)
         self._worker.start()
 
-    def _on_encode_done(self, result: object) -> None:
+    def _on_encode_done(self, output_path: str) -> None:
         self._set_busy(False)
-        stego, sr = result  # type: ignore[misc]
-        out_path = self._pending_out_path
-        out_fmt = self._pending_out_fmt
-        try:
-            target = save_verified_audio(
-                out_path, stego, sr,
-                self._pending_audio_payload, self._pending_audio_password,
-                format=self._SF_FORMAT[out_fmt],
-                subtype=self._SF_SUBTYPE[out_fmt],
-            )
-            self.status_message.emit(f"Saved: {target.name}")
-        except Exception as exc:
-            logger.error("Failed to save stego audio: %s", exc)
-            self.status_message.emit(f"Error saving audio: {exc}")
+        self.status_message.emit(f"Saved and verified: {Path(output_path).name}")
 
     def _extract_message(self) -> None:
         if not self._file_path:
