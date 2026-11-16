@@ -6,6 +6,7 @@ on:
       - ci/appimage
       - feature/fourier-dwt-rs8
       - main
+      - feature/linux-nuitka-appimage
     paths-ignore:
       - '**/*.md'
       - 'LICENSE'
@@ -31,7 +32,7 @@ concurrency:
 jobs:
   linux-appimage:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 120
 
     steps:
       - name: Check out source
@@ -59,7 +60,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
-          python -m pip install pyinstaller
+          python -m pip install nuitka ordered-set zstandard
 
       - name: Run tests
         env:
@@ -88,7 +89,7 @@ jobs:
           set -Eeuo pipefail
           APPIMAGE="$PWD/dist/Cryptoleaf-v0.3-dev-x86_64.AppImage"
           # A GUI should remain alive; a rapid exit usually indicates missing
-          # bundled libraries or a PyInstaller/Qt startup failure.
+          # bundled libraries or a Nuitka/Qt startup failure.
           export APPIMAGE
           timeout 35s xvfb-run -a bash -c '
             set -eu
