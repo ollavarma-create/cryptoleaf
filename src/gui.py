@@ -1524,9 +1524,12 @@ QPushButton:disabled { background-color: #adb5bd; color: #6c757d; }
 QProgressBar {
     border-radius: 4px;
     background: #e9ecef;
+    color: #14281d;
+    text-align: center;
+    font-weight: bold;
 }
 QProgressBar::chunk {
-    background-color: #2d6a4f;
+    background-color: #95d5b2;
     border-radius: 4px;
 }
 
