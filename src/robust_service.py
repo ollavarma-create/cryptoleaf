@@ -6,6 +6,8 @@ Existing image codecs and legacy decoders remain untouched.
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+import os
 from PIL import Image
 
 from .crypto_gcm import encrypt_gcm, decrypt_gcm
@@ -19,10 +21,7 @@ SUPPORTED_OUTPUTS = {"PNG", "JPEG", "WEBP", "BMP"}
 
 def encode_message(cover_path: str | Path, message: bytes, password: str,
                    output_path: str | Path, output_format: str = "PNG") -> None:
-    """Encrypt, embed and save; verify the *saved* image before replacing destination.
-
-    A temporary sibling prevents a failed verification from leaving a corrupt output.
-    """
+    """Encrypt, embed and verify a private file; publish without overwriting."""
     if not password:
         raise ValueError("Robust mode requires a password")
     if not isinstance(message, bytes):
@@ -37,8 +36,10 @@ def encode_message(cover_path: str | Path, message: bytes, password: str,
         raise ValueError("Output file must differ from source image")
     with Image.open(cover_path) as source:
         encoded = embed_robust(source, encrypt_gcm(message, password))
-    # Pillow needs explicit format because the temporary filename has a .tmp suffix.
-    temporary = target.with_name(target.name + ".tmp")
+    # Use a unique private sibling, never a predictable target + ".tmp".
+    # os.link() creates the final name exclusively: existing files are preserved.
+    with NamedTemporaryFile(dir=target.parent, prefix=".cryptoleaf-", suffix=".tmp", delete=False) as temp:
+        temporary = Path(temp.name)
     save_options = {"quality": 85, "subsampling": 0} if fmt == "JPEG" else ({"lossless": True} if fmt == "WEBP" else {})
     try:
         encoded.save(temporary, format=fmt, **save_options)
@@ -46,9 +47,10 @@ def encode_message(cover_path: str | Path, message: bytes, password: str,
             recovered = extract_robust(check).payload
         if decrypt_gcm(recovered, password) != message:
             raise ValueError("Saved robust image did not verify")
-        temporary.replace(target)
+        os.link(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
+        encoded.close()
 
 
 def decode_message(stego_path: str | Path, password: str, should_cancel=None) -> bytes:
