@@ -448,7 +448,7 @@ class ImageTab(QWidget):
         )
         self._capacity_help.setWordWrap(True)
         self._capacity_help.setVisible(False)
-        self._capacity_toggle = QPushButton("Why does capacity change? ▸")
+        self._capacity_toggle = QPushButton("Capacity explained ▸")
         self._capacity_toggle.setToolTip("Show the difference between embedding methods.")
         self._capacity_toggle.clicked.connect(self._toggle_capacity_help)
         left.addWidget(self._capacity_toggle)
@@ -567,7 +567,7 @@ class ImageTab(QWidget):
         visible = not self._capacity_help.isVisible()
         self._capacity_help.setVisible(visible)
         self._capacity_toggle.setText(
-            "Why does capacity change? ▾" if visible else "Why does capacity change? ▸"
+            "Capacity explained ▾" if visible else "Capacity explained ▸"
         )
 
     def _browse_file(self) -> None:
