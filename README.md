@@ -28,6 +28,27 @@ The development AppImage is built on Ubuntu 22.04 with Python 3.11 and packaged 
 
 The former `Distit/` binary directory is no longer maintained in the development tree. Build artifacts belong in GitHub Actions or, when a release is ready, GitHub Releases.
 
+## Screenshots
+
+<!-- Add screenshots to docs/images/ using the filenames below.
+     Until the files are committed, GitHub will display broken-image placeholders. -->
+
+### Robust image steganography
+
+![CryptoLeaf Robust DWT image steganography](docs/images/cryptoleaf-robust.png)
+
+### Batch processing
+
+![CryptoLeaf batch image processing](docs/images/cryptoleaf-batch.png)
+
+### Audio steganography
+
+![CryptoLeaf audio steganography](docs/images/cryptoleaf-audio.png)
+
+### Message extraction
+
+![CryptoLeaf successful message extraction](docs/images/cryptoleaf-extraction.png)
+
 ## Features
 
 | Mode | Inputs / outputs | Description |
