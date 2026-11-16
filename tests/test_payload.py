@@ -12,7 +12,7 @@ def test_utf8_text_is_bytes():
 
 
 def test_binary_roundtrip_and_metadata(tmp_path):
-    original = bytes(range(256)) + b"\\x00\\xff"
+    original = bytes(range(256)) + bytes([0, 255])
     source = tmp_path / "sample.bin"
     source.write_bytes(original)
     payload = Payload.from_file(source)
@@ -41,4 +41,4 @@ def test_reject_nonbytes():
 
 def test_binary_is_not_forced_to_utf8():
     with pytest.raises(UnicodeDecodeError):
-        Payload(b"\\xff").as_text()
+        Payload(bytes([255])).as_text()
