@@ -155,6 +155,7 @@ def process_batch(
                 with NamedTemporaryFile(dir=destination, prefix=".cryptoleaf-", suffix=".tmp", delete=False) as temp:
                     temp_path = Path(temp.name)
                 try:
+                    temp_path.unlink()  # service publishes exclusively; reserve a unique name first
                     encode_robust_message(cover, payload, password, temp_path, output_format=fmt)
                     os.link(temp_path, output)
                 finally:
@@ -164,6 +165,7 @@ def process_batch(
                 with NamedTemporaryFile(dir=destination, prefix=".cryptoleaf-", suffix=".jpg", delete=False) as temp:
                     temp_path = Path(temp.name)
                 try:
+                    temp_path.unlink()  # optimizer publishes exclusively
                     result = optimize_jpeg(cover, temp_path, payload, password, quality=quality, mode="first_success")
                     os.link(temp_path, output)
                     strength, attempts, psnr = result.strength, result.attempts, result.psnr
