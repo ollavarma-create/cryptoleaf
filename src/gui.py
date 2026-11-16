@@ -1386,6 +1386,10 @@ class AudioTab(QWidget):
         if not out_path.lower().endswith(self._OUT_SUFFIX[out_fmt]):
             out_path += self._OUT_SUFFIX[out_fmt]
 
+        if Path(out_path).resolve() == Path(self._file_path).resolve():
+            self.status_message.emit("Output file must differ from the source audio.")
+            return
+
         self._pending_out_path = out_path
         self._pending_out_fmt = out_fmt
 
@@ -1407,14 +1411,21 @@ class AudioTab(QWidget):
         out_path = self._pending_out_path
         out_fmt = self._pending_out_fmt
         try:
-            sf.write(
-                out_path,
-                stego,
-                sr,
-                format=self._SF_FORMAT[out_fmt],
-                subtype=self._SF_SUBTYPE[out_fmt],
-            )
-            self.status_message.emit(f"Saved: {Path(out_path).name}")
+            target = Path(out_path)
+            with NamedTemporaryFile(dir=target.parent, prefix=".cryptoleaf-", suffix=".tmp", delete=False) as temp:
+                temporary = Path(temp.name)
+            try:
+                sf.write(
+                    str(temporary),
+                    stego,
+                    sr,
+                    format=self._SF_FORMAT[out_fmt],
+                    subtype=self._SF_SUBTYPE[out_fmt],
+                )
+                os.link(temporary, target)  # never replace an existing audio file
+            finally:
+                temporary.unlink(missing_ok=True)
+            self.status_message.emit(f"Saved: {target.name}")
         except Exception as exc:
             logger.error("Failed to save stego audio: %s", exc)
             self.status_message.emit(f"Error saving audio: {exc}")
