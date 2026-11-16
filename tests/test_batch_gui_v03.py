@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from PIL import Image
 
 import pytest
 
@@ -12,7 +13,7 @@ def test_batch_progress_callback_dry_run(tmp_path):
     source = tmp_path / "source"
     source.mkdir()
     for name in ("b.jpg", "a.png", "c.webp"):
-        (source / name).write_bytes(b"not a real image")
+        Image.new("RGB", (1024, 1024)).save(source / name)
     calls = []
     output = tmp_path / "output"
     results = process_batch(
