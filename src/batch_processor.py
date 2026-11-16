@@ -13,6 +13,9 @@ from tempfile import NamedTemporaryFile
 from .image_encoder import CapacityError, encode_image
 from .image_decoder import decode_image
 from .jpeg_optimizer import optimize_jpeg
+from .jpeg_v03 import message_fits, max_message_size
+from .error_correction import rs_encode
+from PIL import Image
 
 FORMATS = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".bmp": "BMP", ".webp": "WEBP"}
 REPORT_FIELDS = ("image", "output", "format", "status", "strength", "attempts", "psnr", "elapsed_s", "error")
@@ -29,6 +32,30 @@ class BatchResult:
     psnr: float | None = None
     elapsed_s: float = 0.0
     error: str = ""
+
+
+def _check_legacy_capacity(cover: Path, fmt: str, payload: bytes, password: str) -> None:
+    """Validate geometric capacity without encrypting or writing output files."""
+    with Image.open(cover) as image:
+        width, height = image.size
+    if fmt == "JPEG":
+        if not message_fits(width, height, len(payload)):
+            maximum = max_message_size(width, height)
+            raise CapacityError(
+                f"JPEG capacity exceeded: {len(payload)} bytes required, "
+                f"maximum {maximum} bytes for {width}x{height}"
+            )
+    else:
+        # Legacy AES-CBC wire format: salt(16) + IV(16) + PKCS#7 ciphertext.
+        encrypted_size = 32 + 16 * (len(payload) // 16 + 1) if password else len(payload)
+        # The encoder Reed-Solomon protects both the 32-byte header and payload.
+        needed = len(rs_encode(bytes(32))) + len(rs_encode(bytes(encrypted_size)))
+        available = width * height * 3 // 8
+        if needed > available:
+            raise CapacityError(
+                f"{fmt} capacity exceeded: {needed} encoded bytes required, "
+                f"{available} available for {width}x{height}"
+            )
 
 
 def process_batch(
@@ -80,6 +107,7 @@ def process_batch(
                 else:
                     raise FileExistsError(f"Output exists: {output}")
             elif dry_run:
+                _check_legacy_capacity(cover, fmt, payload, password)
                 status = "DRY_RUN"
             elif fmt == "JPEG":
                 # Optimize into a private file, then publish atomically without overwrite.
