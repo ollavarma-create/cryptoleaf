@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>cryptoleaf.desktop</id>
+  <id>io.github.ollavarma-create.cryptoleaf.desktop</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>CryptoLeaf</name>
@@ -11,7 +11,7 @@
   </description>
   <url type="homepage">https://github.com/ollavarma-create/cryptoleaf</url>
   <url type="bugtracker">https://github.com/ollavarma-create/cryptoleaf/issues</url>
-  <launchable type="desktop-id">cryptoleaf.desktop</launchable>
+  <launchable type="desktop-id">io.github.ollavarma-create.cryptoleaf.desktop</launchable>
   <categories>
     <category>Utility</category>
     <category>Security</category>
