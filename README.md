@@ -13,17 +13,18 @@ Cryptoleaf hides short messages in images or audio. Some modes support password-
 ## Downloads and development builds
 
 - **Source code:** [GitHub repository](https://github.com/ollavarma-create/cryptoleaf).
-- **Linux x86-64 development AppImage:** open the [AppImage GitHub Actions workflow](https://github.com/ollavarma-create/cryptoleaf/actions/workflows/appimage.yml), choose a successful run, and download the `cryptoleaf-v0.3-dev-linux-x86_64` artifact. Extract the ZIP downloaded from Actions, then make the `.AppImage` executable.
+- **Linux x86-64 development AppImage:** open the [AppImage GitHub Actions workflow](https://github.com/ollavarma-create/cryptoleaf/actions/workflows/appimage.yml), choose a successful run, and download the `cryptoleaf-v0.3-dev-linux-x86_64` artifact. Extract the ZIP downloaded from Actions; it contains the `.AppImage` and `SHA256SUMS.txt` checksum file. Verify the checksum before running.
 - **Published releases:** check [GitHub Releases](https://github.com/ollavarma-create/cryptoleaf/releases) for any formally published versions. A successful development workflow run does **not** create a release.
 
 Run a downloaded AppImage on Linux:
 
 ```bash
+sha256sum -c SHA256SUMS.txt
 chmod +x Cryptoleaf-v0.3-dev-x86_64.AppImage
 ./Cryptoleaf-v0.3-dev-x86_64.AppImage
 ```
 
-The AppImage is currently built on Ubuntu 22.04 with Python 3.11 and packaged using PyInstaller and appimagetool. It is tested automatically under Xvfb and has also been manually exercised on Fedora KDE. Compatibility with every Linux distribution has not been established.
+The development AppImage is built on Ubuntu 22.04 with Python 3.11 and packaged using Nuitka and appimagetool. It is tested automatically under Xvfb and has also been manually exercised on Fedora KDE. Compatibility with every Linux distribution has not been established.
 
 The former `Distit/` binary directory is no longer maintained in the development tree. Build artifacts belong in GitHub Actions or, when a release is ready, GitHub Releases.
 
