@@ -142,13 +142,20 @@ class TestAudioRoundTrip:
         recovered = decode_audio((stego, sr), password=password, chip_length=_CHIP_LENGTH)
         assert recovered == message
 
-    def test_wrong_password_raises(self, mono_cover: Path) -> None:
+    def test_wrong_password_never_recovers_plaintext_legacy(self, mono_cover: Path) -> None:
+        """Legacy AES-CBC is not authenticated; valid padding is possible by chance."""
         message = b"sensitive data"
         stego, sr = encode_audio(
             mono_cover, message, password="rightpassword", chip_length=_CHIP_LENGTH
         )
-        with pytest.raises(Exception):
-            decode_audio((stego, sr), password="wrongpassword", chip_length=_CHIP_LENGTH)
+        try:
+            recovered = decode_audio(
+                (stego, sr), password="wrongpassword", chip_length=_CHIP_LENGTH
+            )
+        except ValueError:
+            pass  # Wrong password usually causes invalid PKCS#7 padding.
+        else:
+            assert recovered != message
 
     def test_output_same_length(self, mono_cover: Path) -> None:
         original, _ = sf.read(mono_cover, dtype="float64", always_2d=True)

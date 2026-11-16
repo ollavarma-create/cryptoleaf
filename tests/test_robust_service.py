@@ -49,3 +49,32 @@ def test_verification_failure_keeps_destination(tmp_path):
             service.encode_message(source, b"hello", "pw", dest)
     assert dest.read_bytes() == b"existing"
     assert not (tmp_path / "output.png.tmp").exists()
+
+
+def test_existing_robust_output_is_not_overwritten(tmp_path):
+    source = tmp_path / "source.png"
+    dest = tmp_path / "output.png"
+    Image.new("RGB", (32, 32)).save(source)
+    dest.write_bytes(b"existing output")
+    with patch.object(service, "encrypt_gcm", return_value=b"cipher"), \
+         patch.object(service, "decrypt_gcm", return_value=b"hello"), \
+         patch.object(service, "embed_robust", return_value=Image.new("RGB", (32, 32))), \
+         patch.object(service, "extract_robust", return_value=SimpleNamespace(payload=b"cipher")):
+        with pytest.raises(FileExistsError):
+            service.encode_message(source, b"hello", "pw", dest)
+    assert dest.read_bytes() == b"existing output"
+    assert not list(tmp_path.glob(".cryptoleaf-*"))
+
+
+def test_robust_temporary_file_is_cleaned_on_verification_error(tmp_path):
+    source = tmp_path / "source.png"
+    dest = tmp_path / "output.png"
+    Image.new("RGB", (32, 32)).save(source)
+    with patch.object(service, "encrypt_gcm", return_value=b"cipher"), \
+         patch.object(service, "decrypt_gcm", return_value=b"incorrect"), \
+         patch.object(service, "embed_robust", return_value=Image.new("RGB", (32, 32))), \
+         patch.object(service, "extract_robust", return_value=SimpleNamespace(payload=b"cipher")):
+        with pytest.raises(ValueError, match="verify"):
+            service.encode_message(source, b"hello", "pw", dest)
+    assert not dest.exists()
+    assert not list(tmp_path.glob(".cryptoleaf-*"))

@@ -187,10 +187,23 @@ class TestBlockLuminance:
         recovered = decode_image(stego, password=password)
         assert recovered == message
 
-    def test_wrong_password_raises(self, jpeg_cover: Path) -> None:
+    def test_wrong_password_never_recovers_plaintext_legacy(self, jpeg_cover: Path) -> None:
+        """Legacy CBC lacks authentication: wrong keys may yield valid padding."""
         message = b"sensitive"
         stego, actual_format = encode_image(jpeg_cover, message, password="right", output_format="JPEG")
-        with pytest.raises(Exception):
+        try:
+            recovered = decode_image(stego, password="wrong")
+        except ValueError:
+            pass  # The usual outcome: invalid PKCS#7 padding.
+        else:
+            assert recovered != message
+
+    def test_wrong_password_raises_v03(self, jpeg_cover: Path) -> None:
+        """JPEG v0.3 uses authenticated AES-GCM and must reject wrong keys."""
+        from src.image_encoder import _encode_image_block_v03
+
+        stego = _encode_image_block_v03(jpeg_cover, b"sensitive", password="right")
+        with pytest.raises(ValueError):
             decode_image(stego, password="wrong")
 
     def test_same_dimensions_after_encode(self, jpeg_cover: Path) -> None:

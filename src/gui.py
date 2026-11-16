@@ -35,6 +35,8 @@ thread is never blocked.  Signals carry results back to the main thread.
 """
 
 import logging
+import os
+from tempfile import NamedTemporaryFile
 from pathlib import Path
 
 import numpy as np
@@ -67,6 +69,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .audio_decoder import decode_audio, BadAudioMagicError
+from .audio_service import save_verified_audio
 from .audio_encoder import encode_audio, capacity_bits_audio
 from .image_decoder import decode_image, BadMagicError
 from .image_encoder import encode_image, capacity_bits, CapacityError
@@ -255,31 +258,36 @@ class _ImageDecodeWorker(QThread):
         try:
             data = decode_image(self._stego_path, self._password)
             self.finished.emit(data)
+        except (BadMagicError, ReedSolomonError) as exc:
+            # A valid image encoded with another mode is an expected miss.
+            logger.debug("No legacy image payload detected: %s", exc)
+            self.error.emit(_friendly_decode_error(exc, bool(self._password)))
         except Exception as exc:
             logger.error("Image decoding failed: %s", exc)
             self.error.emit(_friendly_decode_error(exc, bool(self._password)))
 
 
 class _AudioEncodeWorker(QThread):
-    """Runs encode_audio in a background thread.
+    """Encode, save, verify and publish audio entirely off the GUI thread."""
 
-    Signals:
-        finished: Emits ``(np.ndarray, samplerate)`` tuple on success.
-        error: Emits a human-readable error string on failure.
-    """
-
-    finished = pyqtSignal(object)  # tuple[np.ndarray, int]
+    finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
     def __init__(
         self,
         cover_path: str,
+        output_path: str,
+        output_format: str,
+        output_subtype: str,
         payload: bytes,
         password: str,
         alpha: float,
     ) -> None:
         super().__init__()
         self._cover_path = cover_path
+        self._output_path = output_path
+        self._output_format = output_format
+        self._output_subtype = output_subtype
         self._payload = payload
         self._password = password
         self._alpha = alpha
@@ -292,10 +300,19 @@ class _AudioEncodeWorker(QThread):
                 self._password,
                 self._alpha,
             )
-            self.finished.emit((stego, sr))
+            saved = save_verified_audio(
+                self._output_path,
+                stego,
+                sr,
+                self._payload,
+                self._password,
+                format=self._output_format,
+                subtype=self._output_subtype,
+            )
+            self.finished.emit(str(saved))
         except Exception as exc:
-            logger.error("Audio encoding failed: %s", exc)
-            self.error.emit(str(exc))
+            logger.exception("Audio encoding or verification failed")
+            self.error.emit(f"{type(exc).__name__}: {exc}")
 
 
 class _AudioDecodeWorker(QThread):
@@ -441,12 +458,37 @@ class ImageTab(QWidget):
         self._capacity_label = QLabel("Capacity: –")
         self._capacity_label.setWordWrap(True)
         left.addWidget(self._capacity_label)
-
+        self._metadata_title = QLabel("Image metadata")
+        self._metadata_title.setStyleSheet("font-weight: bold;")
+        self._metadata_title.setVisible(False)
+        left.addWidget(self._metadata_title)
         self._exif_label = QLabel("")
         self._exif_label.setWordWrap(True)
-        self._exif_label.setStyleSheet("color: #6c757d; font-size: 11px;")
         self._exif_label.setVisible(False)
         left.addWidget(self._exif_label)
+        self._gps_warning = QLabel(
+            "Location metadata may reveal where the photo was taken. "
+            "Encryption of the hidden message does not protect EXIF metadata."
+        )
+        self._gps_warning.setWordWrap(True)
+        self._gps_warning.setToolTip(
+            "Whether EXIF survives export depends on the image format and saving method."
+        )
+        self._gps_warning.setVisible(False)
+        left.addWidget(self._gps_warning)
+
+        self._capacity_help = QLabel(
+            "Robust uses low-capacity experimental DWT embedding; Capacity uses "
+            "high-capacity lossless LSB. Encryption and error correction add overhead. "
+            "Actual success also depends on image size and output format."
+        )
+        self._capacity_help.setWordWrap(True)
+        self._capacity_help.setVisible(False)
+        self._capacity_toggle = QPushButton("Capacity explained ▸")
+        self._capacity_toggle.setToolTip("Show the difference between embedding methods.")
+        self._capacity_toggle.clicked.connect(self._toggle_capacity_help)
+        left.addWidget(self._capacity_toggle)
+        left.addWidget(self._capacity_help)
 
         left.addStretch()
 
@@ -480,12 +522,20 @@ class ImageTab(QWidget):
         self._mode_combo.addItem("Robust – short encrypted messages", "robust")
         self._mode_combo.addItem("Capacity – lossless LSB / legacy decode", "capacity")
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        self._mode_combo.setToolTip(
+            "Robust: encrypted low-capacity experimental DWT embedding. "
+            "Capacity: lossless LSB for PNG, BMP and WebP; legacy JPEG extraction."
+        )
         form.addRow("Image mode:", self._mode_combo)
 
         self._format_combo = QComboBox()
         self._format_combo.addItems(self._FORMAT_OPTIONS)
         self._format_combo.currentTextChanged.connect(self._on_format_changed)
-        form.addRow("Output format:", self._format_combo)
+        self._format_combo.setToolTip(
+            "Only used when hiding a message. Extraction reads the selected image "
+            "without using this setting."
+        )
+        form.addRow("Output format (hide only):", self._format_combo)
 
         self._jpeg_warning = QLabel(
             "JPEG v0.3: automatic strength optimization (quality 85). "
@@ -512,8 +562,14 @@ class ImageTab(QWidget):
         btn_row = QHBoxLayout()
         self._hide_btn = QPushButton("Hide Message")
         self._hide_btn.clicked.connect(self._hide_message)
+        self._hide_btn.setToolTip(
+            "Embed the message in the selected cover image and save using Output format."
+        )
         self._extract_btn = QPushButton("Extract Message")
         self._extract_btn.clicked.connect(self._extract_message)
+        self._extract_btn.setToolTip(
+            "Recover a message from the selected image. Output format is ignored."
+        )
         btn_row.addWidget(self._hide_btn)
         btn_row.addWidget(self._extract_btn)
         self._cancel_btn = QPushButton("Cancel extraction")
@@ -536,6 +592,13 @@ class ImageTab(QWidget):
         root.addWidget(right_widget, stretch=1)
 
     # --- File selection ---------------------------------------------------------
+
+    def _toggle_capacity_help(self) -> None:
+        visible = not self._capacity_help.isVisible()
+        self._capacity_help.setVisible(visible)
+        self._capacity_toggle.setText(
+            "Capacity explained ▾" if visible else "Capacity explained ▸"
+        )
 
     def _browse_file(self) -> None:
         last_dir = self._settings.value("last_dir", "", str)
@@ -607,15 +670,14 @@ class ImageTab(QWidget):
                 )
                 self._capacity_label.setStyleSheet("")
             elif fmt == "JPEG":
-                needed, available = self._jpeg_block_counts()
-                self._current_capacity = 0  # JPEG uses blocks, not LSB bytes
+                # Capacity mode supports JPEG extraction only. Do not present
+                # encoder block requirements as a failure for an opened stego.
+                self._current_capacity = 0
                 self._capacity_label.setText(
-                    f"JPEG v0.3: {available:,} blocks available; "
-                    f"{needed:,} required for current message"
+                    "JPEG: extraction available (Capacity mode). "
+                    "Switch to Robust to hide a new message."
                 )
-                self._capacity_label.setStyleSheet(
-                    "color: #b00020;" if needed > available else ""
-                )
+                self._capacity_label.setStyleSheet("")
             else:
                 bits = capacity_bits(path, output_format=fmt)
                 usable = max(0, bits // 8 - 64)
@@ -632,26 +694,19 @@ class ImageTab(QWidget):
     def _update_exif(self, path: str) -> None:
         from .utils import read_exif_tags
         tags = read_exif_tags(path)
-        self._exif_label.setText(tags)
+        # Existing EXIF helper provides camera, date and GPS as delimited fields.
+        # Keep it as the single parsing source and present fields on separate lines.
+        self._exif_label.setText("\n".join(tags.split(" | ")))
         self._exif_label.setVisible(bool(tags))
+        self._metadata_title.setVisible(bool(tags))
+        self._gps_warning.setVisible(any(part.startswith("📍") for part in tags.split(" | ")))
 
     def _update_remaining(self) -> None:
         used = len(self._message_edit.toPlainText().encode("utf-8"))
         cap = self._current_capacity
         left = cap - used
         if not self._is_robust() and self._format_combo.currentText() == "JPEG":
-            if self._file_path:
-                try:
-                    needed, available = self._jpeg_block_counts()
-                    self._capacity_label.setText(
-                        f"JPEG v0.3: {available:,} blocks available; "
-                        f"{needed:,} required for current message"
-                    )
-                    self._capacity_label.setStyleSheet(
-                        "color: #b00020;" if needed > available else ""
-                    )
-                except Exception as exc:
-                    logger.warning("JPEG capacity check failed: %s", exc)
+            # This is an extraction-only combination, not a capacity error.
             self._remaining_label.setText(f"Message: {used:,} bytes")
             self._remaining_label.setStyleSheet("")
             return
@@ -815,7 +870,14 @@ class ImageTab(QWidget):
                 save_kwargs["quality"] = 85
             elif actual_fmt == "WEBP":
                 save_kwargs["lossless"] = True
-            img.save(out_path, **save_kwargs)  # type: ignore[union-attr]
+            target = Path(out_path)
+            with NamedTemporaryFile(dir=target.parent, prefix=".cryptoleaf-", suffix=".tmp", delete=False) as temp:
+                temporary = Path(temp.name)
+            try:
+                img.save(temporary, **save_kwargs)  # type: ignore[union-attr]
+                os.link(temporary, target)  # fail if output already exists
+            finally:
+                temporary.unlink(missing_ok=True)
             if requested_fmt == actual_fmt:
                 self.status_message.emit(f"Saved: {Path(out_path).name}")
             else:
@@ -907,7 +969,7 @@ class _BatchWorker(QThread):
     error = pyqtSignal(str)
 
     def __init__(self, input_dir: str, output_dir: str, payload: bytes,
-                 password: str, dry_run: bool, skip_existing: bool) -> None:
+                 password: str, dry_run: bool, skip_existing: bool, mode: str = "legacy") -> None:
         super().__init__()
         self.input_dir = input_dir
         self.output_dir = output_dir
@@ -915,12 +977,13 @@ class _BatchWorker(QThread):
         self.password = password
         self.dry_run = dry_run
         self.skip_existing = skip_existing
+        self.mode = mode
 
     def run(self) -> None:
         try:
             results = process_batch(
                 self.input_dir, self.output_dir, self.payload, self.password,
-                dry_run=self.dry_run, skip_existing=self.skip_existing,
+                dry_run=self.dry_run, skip_existing=self.skip_existing, mode=self.mode,
                 on_progress=lambda result, done, total: self.progress.emit(result, done, total),
             )
             report = ""
@@ -980,6 +1043,19 @@ class BatchTab(QWidget):
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
         password_row.addWidget(self._password)
         root.addLayout(password_row)
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Embedding mode:"))
+        self._mode = QComboBox()
+        self._mode.addItem("Legacy (LSB / JPEG v0.3)", "legacy")
+        self._mode.addItem("Robust (experimental DWT)", "robust")
+        self._mode.setToolTip(
+            "Legacy: high-capacity LSB for lossless images; JPEG v0.3 for JPEG.\\n"
+            "Robust: low-capacity experimental Fourier/DWT transport for all formats.\\n"
+            "Robust does not guarantee survival of social-media recompression."
+        )
+        mode_row.addWidget(self._mode)
+        mode_row.addStretch()
+        root.addLayout(mode_row)
         options = QHBoxLayout()
         self._skip = QCheckBox("Skip existing output files")
         self._dry = QCheckBox("Dry run (no files written)")
@@ -1036,7 +1112,7 @@ class BatchTab(QWidget):
             QMessageBox.warning(self, "Message required", "Enter a message to hide.")
             return
         if not self._password.text():
-            QMessageBox.warning(self, "Password required", "Batch JPEG v0.3 requires a password.")
+            QMessageBox.warning(self, "Password required", "Batch encoding requires a password.")
             return
         self._counts = {"OK": 0, "SKIPPED": 0, "FAIL": 0, "DRY_RUN": 0}
         self._results.clear()
@@ -1047,6 +1123,7 @@ class BatchTab(QWidget):
         self._worker = _BatchWorker(
             str(source), str(destination), message.encode("utf-8"),
             self._password.text(), self._dry.isChecked(), self._skip.isChecked(),
+            self._mode.currentData(),
         )
         self._worker.progress.connect(self._on_progress)
         self._worker.completed.connect(self._on_completed)
@@ -1320,13 +1397,17 @@ class AudioTab(QWidget):
         if not out_path.lower().endswith(self._OUT_SUFFIX[out_fmt]):
             out_path += self._OUT_SUFFIX[out_fmt]
 
-        self._pending_out_path = out_path
-        self._pending_out_fmt = out_fmt
+        if Path(out_path).resolve() == Path(self._file_path).resolve():
+            self.status_message.emit("Output file must differ from the source audio.")
+            return
 
         self._set_busy(True)
-        self.status_message.emit("Embedding message…")
+        self.status_message.emit("Embedding, saving and verifying audio…")
         self._worker = _AudioEncodeWorker(
             self._file_path,
+            out_path,
+            self._SF_FORMAT[out_fmt],
+            self._SF_SUBTYPE[out_fmt],
             message.encode("utf-8"),
             self._password_edit.text(),
             self._alpha_float(),
@@ -1335,23 +1416,9 @@ class AudioTab(QWidget):
         self._worker.error.connect(self._on_worker_error)
         self._worker.start()
 
-    def _on_encode_done(self, result: object) -> None:
+    def _on_encode_done(self, output_path: str) -> None:
         self._set_busy(False)
-        stego, sr = result  # type: ignore[misc]
-        out_path = self._pending_out_path
-        out_fmt = self._pending_out_fmt
-        try:
-            sf.write(
-                out_path,
-                stego,
-                sr,
-                format=self._SF_FORMAT[out_fmt],
-                subtype=self._SF_SUBTYPE[out_fmt],
-            )
-            self.status_message.emit(f"Saved: {Path(out_path).name}")
-        except Exception as exc:
-            logger.error("Failed to save stego audio: %s", exc)
-            self.status_message.emit(f"Error saving audio: {exc}")
+        self.status_message.emit(f"Saved and verified: {Path(output_path).name}")
 
     def _extract_message(self) -> None:
         if not self._file_path:
@@ -1509,9 +1576,12 @@ QPushButton:disabled { background-color: #adb5bd; color: #6c757d; }
 QProgressBar {
     border-radius: 4px;
     background: #e9ecef;
+    color: #14281d;
+    text-align: center;
+    font-weight: bold;
 }
 QProgressBar::chunk {
-    background-color: #2d6a4f;
+    background-color: #95d5b2;
     border-radius: 4px;
 }
 

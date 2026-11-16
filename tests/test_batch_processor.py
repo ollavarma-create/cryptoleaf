@@ -10,7 +10,7 @@ from src import batch_processor as batch
 def test_dry_run_does_not_create_outputs(tmp_path):
     src, out = tmp_path / 'input', tmp_path / 'output'
     src.mkdir()
-    (src / 'photo.jpg').write_bytes(b'not actually decoded in dry run')
+    Image.new('RGB', (1024, 1024)).save(src / 'photo.jpg')
     results = batch.process_batch(src, out, b'secret', 'password', dry_run=True)
     assert [r.status for r in results] == ['DRY_RUN']
     assert not out.exists()
@@ -116,3 +116,89 @@ def test_jpeg_failure_leaves_no_temp_files(tmp_path, monkeypatch):
     results = batch.process_batch(src, out, b'secret', 'password')
     assert results[0].status == 'FAIL'
     assert not list(out.iterdir())
+
+
+def test_dry_run_rejects_oversized_lossless_payload(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    Image.new("RGB", (16, 16)).save(source / "tiny.png")
+    output = tmp_path / "output"
+    result = batch.process_batch(source, output, b"x" * 1000, "password", dry_run=True)
+    assert result[0].status == "SKIPPED"
+    assert "capacity" in result[0].error.lower()
+    assert not output.exists()
+
+
+def test_dry_run_rejects_oversized_jpeg_payload(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    Image.new("RGB", (128, 128)).save(source / "tiny.jpg")
+    output = tmp_path / "output"
+    result = batch.process_batch(source, output, b"x" * 100, "password", dry_run=True)
+    assert result[0].status == "SKIPPED"
+    assert "capacity" in result[0].error.lower()
+    assert not output.exists()
+
+
+def test_dry_run_rejects_corrupt_image(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    (source / "bad.png").write_bytes(b"invalid")
+    result = batch.process_batch(source, tmp_path / "output", b"hello", "password", dry_run=True)
+    assert result[0].status == "FAIL"
+
+
+def test_robust_dry_run_rejects_transport_limit(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    Image.new("RGB", (1280, 1280)).save(source / "a.png")
+    results = batch.process_batch(
+        source, tmp_path / "output", b"x" * (batch.MAX_MESSAGE_BYTES + 1),
+        "password", mode="robust", dry_run=True,
+    )
+    assert results[0].status == "SKIPPED"
+    assert "Robust capacity exceeded" in results[0].error
+    assert not (tmp_path / "output").exists()
+
+
+def test_robust_dry_run_rejects_small_image(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    Image.new("RGB", (64, 64)).save(source / "a.png")
+    results = batch.process_batch(
+        source, tmp_path / "output", b"hello", "password",
+        mode="robust", dry_run=True,
+    )
+    assert results[0].status == "SKIPPED"
+    assert "LL2 coefficients" in results[0].error
+
+
+def test_robust_batch_never_overwrites_and_cleans_temp(tmp_path, monkeypatch):
+    source = tmp_path / "input"
+    source.mkdir()
+    Image.new("RGB", (1024, 1024)).save(source / "a.png")
+    output = tmp_path / "output"
+    output.mkdir()
+    target = output / "a_cryptoleaf.png"
+    calls = []
+
+    def fake_encode(cover, payload, password, destination, output_format):
+        calls.append(output_format)
+        Path(destination).write_bytes(b"robust result")
+
+    monkeypatch.setattr(batch, "encode_robust_message", fake_encode)
+    first = batch.process_batch(source, output, b"hi", "password", mode="robust")
+    assert first[0].status == "OK", first[0].error
+    assert calls == ["PNG"]
+    assert target.read_bytes() == b"robust result"
+    second = batch.process_batch(source, output, b"hi", "password", mode="robust")
+    assert second[0].status == "FAIL"
+    assert target.read_bytes() == b"robust result"
+    assert not list(output.glob(".cryptoleaf-*"))
+
+
+def test_invalid_batch_mode_is_rejected(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    with pytest.raises(ValueError, match="mode"):
+        batch.process_batch(source, tmp_path / "output", b"hi", "password", mode="unknown")
