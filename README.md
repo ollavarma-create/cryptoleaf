@@ -1,8 +1,8 @@
 # Cryptoleaf
 
-**Cryptoleaf v0.3-dev** — an open-source image and audio steganography application for Linux and Windows, written in Python with a PyQt6 interface.
+**Cryptoleaf v0.3 alpha / ongoing v0.3 development** — an open-source image and audio steganography application for Linux and Windows, written in Python with a PyQt6 interface.
 
-**Status:** active development. The current development build is **not** a stable v0.3 release. The older v0.2.1 release predates the robust image and batch features described below.
+**Status:** experimental alpha. [v0.3.0a1](https://github.com/ollavarma-create/cryptoleaf/releases/tag/v0.3.0a1) is published with a Windows build; the Linux AppImage has passed CI and manual Fedora testing, and is available as a development artifact until it is attached to a release. Neither build should be considered independently security-audited. The older v0.2.1 release predates the robust image and batch features described below.
 
 Cryptoleaf hides short messages in images or audio. Some modes support password-based encryption. **Steganography is not a guarantee of secrecy or undetectability**, and a successful save does not guarantee survival of subsequent editing, recompression, or resizing.
 
@@ -12,9 +12,10 @@ Cryptoleaf hides short messages in images or audio. Some modes support password-
 
 ## Downloads and development builds
 
+- **Latest alpha release (Windows):** [v0.3.0a1 on GitHub Releases](https://github.com/ollavarma-create/cryptoleaf/releases/tag/v0.3.0a1). Download the Windows standalone ZIP and its checksum information from the release page.
 - **Source code:** [GitHub repository](https://github.com/ollavarma-create/cryptoleaf).
 - **Linux x86-64 development AppImage:** open the [AppImage GitHub Actions workflow](https://github.com/ollavarma-create/cryptoleaf/actions/workflows/appimage.yml), choose a successful run, and download the `cryptoleaf-v0.3-dev-linux-x86_64` artifact. Extract the ZIP downloaded from Actions; it contains the `.AppImage` and `SHA256SUMS.txt` checksum file. Verify the checksum before running.
-- **Published releases:** check [GitHub Releases](https://github.com/ollavarma-create/cryptoleaf/releases) for any formally published versions. A successful development workflow run does **not** create a release.
+- **Other releases:** see [GitHub Releases](https://github.com/ollavarma-create/cryptoleaf/releases). A successful development workflow run does **not** create a release; Linux release assets may be added separately.
 
 Run a downloaded AppImage on Linux:
 
@@ -30,24 +31,29 @@ The former `Distit/` binary directory is no longer maintained in the development
 
 ## Screenshots
 
-<!-- Add screenshots to docs/images/ using the filenames below.
-     Until the files are committed, GitHub will display broken-image placeholders. -->
-
 ### Robust image steganography
 
 ![CryptoLeaf Robust DWT image steganography](docs/images/cryptoleaf-robust.png)
+
+*Robust image mode and image metadata display. Note that encryption of a hidden message does not remove EXIF location data from the image.*
 
 ### Batch processing
 
 ![CryptoLeaf batch image processing](docs/images/cryptoleaf-batch.png)
 
+*Batch dry-run preview: seven files eligible for processing and one skipped because of insufficient robust capacity. No output files were written in this example.*
+
 ### Audio steganography
 
 ![CryptoLeaf audio steganography](docs/images/cryptoleaf-audio.png)
 
+*Audio message embedding with an example text payload.*
+
 ### Message extraction
 
 ![CryptoLeaf successful message extraction](docs/images/cryptoleaf-extraction.png)
+
+*Successful extraction of a hidden message from an image.*
 
 ## Features
 
@@ -68,6 +74,8 @@ The GUI has **Image**, **Batch**, **Audio**, and **About** tabs. It also provide
 - The Capacity/LSB mode is not designed to survive lossy recompression.
 - The JPEG optimizer checks the JPEG it actually saves. Editing the resulting JPEG later may destroy its payload.
 - For important data, retain the original message and verify extraction from the final carrier before sharing it.
+- **Metadata warning:** image EXIF data may disclose location, device and capture time. Encryption of the embedded message does not encrypt or sanitize metadata. Inspect or strip metadata separately before sharing.
+- See [Robust mode testing guide](docs/ROBUST_TESTING.md) for reproducible tests and reporting.
 
 ## Install from source
 
@@ -165,9 +173,20 @@ The old `Distit/` and `testitiedostoja/` directories are removed from the develo
 
 - **v0.1.1 (2025):** initial image/audio steganography GUI.
 - **v0.2.1 (2026):** legacy JPEG and audio/image feature development.
-- **v0.3-dev (unreleased):** JPEG optimization, batch processing, experimental Fourier/DWT robust mode, authenticated encryption for robust messages, and automated Linux AppImage builds.
+- **v0.3.0a1 (2026, alpha):** Windows standalone prerelease, JPEG optimization, batch processing, experimental Fourier/DWT robust mode, authenticated encryption for robust messages, and Linux AppImage development builds.
 
-This README describes the current development code, **not** a claim that these features exist in previously published v0.2.1 binaries.
+The README describes the current main branch and v0.3 alpha work. Some main-branch packaging changes were made after the v0.3.0a1 tag; consult the release notes and build provenance for the exact contents of each binary.
+
+## Roadmap (tentative)
+
+- **v0.4 — reliability and validation:** measure extraction success after real-world recompression, format conversion and resizing; improve reproducible benchmarks, error reporting and usability based on tester feedback.
+- **v0.5+ — research and exploration:** investigate adaptive embedding, synchronization and error-correction improvements, and possibly multi-image payload distribution. These are research directions, **not** committed features or release dates.
+
+See [Robust testing and reporting](docs/ROBUST_TESTING.md) to help evaluate the experimental transport mode.
+
+## Development and AI assistance
+
+Cryptoleaf is an independently maintained open-source project developed with substantial assistance from **OpenAI's ChatGPT (GPT-6)**, including Python/PyQt6 implementation, debugging, test development, packaging and documentation. Project direction, design decisions and acceptance testing are human-led. AI-assisted code is reviewed and tested, but the use of AI does not imply a security audit or guarantee of correctness.
 
 ## License
 
