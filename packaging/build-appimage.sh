@@ -24,7 +24,7 @@ PYTHON="${PYTHON:-python}"
 
 test -x "$ROOT/dist/Cryptoleaf.dist/Cryptoleaf"
 rm -rf "$APPDIR"
-mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$ROOT/build"
+mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$APPDIR/usr/share/metainfo" "$ROOT/build"
 cp -a "$ROOT/dist/Cryptoleaf.dist/." "$APPDIR/usr/bin/"
 
 cat > "$APPDIR/AppRun" <<'EOF'
@@ -46,6 +46,7 @@ Terminal=false
 Categories=Utility;Security;
 EOF
 
+cp "$ROOT/packaging/cryptoleaf.appdata.xml" "$APPDIR/usr/share/metainfo/cryptoleaf.appdata.xml"
 cp "$ROOT/assets/icon.png" "$APPDIR/cryptoleaf.png"
 cp "$ROOT/assets/icon.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/cryptoleaf.png"
 
@@ -58,4 +59,4 @@ chmod +x "$TOOL"
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" "$APPDIR" "$OUTPUT"
 test -s "$OUTPUT"
 chmod +x "$OUTPUT"
-sha256sum "$OUTPUT"
+( cd "$ROOT/dist" && sha256sum "$(basename "$OUTPUT")" > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt )
