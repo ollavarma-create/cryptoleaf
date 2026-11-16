@@ -32,9 +32,15 @@ def _publish_exclusive(path: Path, data: bytes) -> None:
         try:
             temp.write(data)
             temp.flush()
-            os.link(temporary, path)
-        finally:
+        except BaseException:
+            temp.close()
             temporary.unlink(missing_ok=True)
+            raise
+
+    try:
+        os.link(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def optimize_jpeg(cover_path: str | Path, output_path: str | Path,
