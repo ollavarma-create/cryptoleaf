@@ -441,6 +441,25 @@ class ImageTab(QWidget):
         self._capacity_label = QLabel("Capacity: –")
         self._capacity_label.setWordWrap(True)
         left.addWidget(self._capacity_label)
+        self._metadata_title = QLabel("Image metadata")
+        self._metadata_title.setStyleSheet("font-weight: bold;")
+        self._metadata_title.setVisible(False)
+        left.addWidget(self._metadata_title)
+        self._exif_label = QLabel("")
+        self._exif_label.setWordWrap(True)
+        self._exif_label.setVisible(False)
+        left.addWidget(self._exif_label)
+        self._gps_warning = QLabel(
+            "Location metadata may reveal where the photo was taken. "
+            "Encryption of the hidden message does not protect EXIF metadata."
+        )
+        self._gps_warning.setWordWrap(True)
+        self._gps_warning.setToolTip(
+            "Whether EXIF survives export depends on the image format and saving method."
+        )
+        self._gps_warning.setVisible(False)
+        left.addWidget(self._gps_warning)
+
         self._capacity_help = QLabel(
             "Robust uses low-capacity experimental DWT embedding; Capacity uses "
             "high-capacity lossless LSB. Encryption and error correction add overhead. "
@@ -453,12 +472,6 @@ class ImageTab(QWidget):
         self._capacity_toggle.clicked.connect(self._toggle_capacity_help)
         left.addWidget(self._capacity_toggle)
         left.addWidget(self._capacity_help)
-
-        self._exif_label = QLabel("")
-        self._exif_label.setWordWrap(True)
-        self._exif_label.setStyleSheet("color: #6c757d; font-size: 11px;")
-        self._exif_label.setVisible(False)
-        left.addWidget(self._exif_label)
 
         left.addStretch()
 
@@ -665,8 +678,12 @@ class ImageTab(QWidget):
     def _update_exif(self, path: str) -> None:
         from .utils import read_exif_tags
         tags = read_exif_tags(path)
-        self._exif_label.setText(tags)
+        # Existing EXIF helper provides camera, date and GPS as delimited fields.
+        # Keep it as the single parsing source and present fields on separate lines.
+        self._exif_label.setText("\\n".join(tags.split(" | ")))
         self._exif_label.setVisible(bool(tags))
+        self._metadata_title.setVisible(bool(tags))
+        self._gps_warning.setVisible(any(part.startswith("📍") for part in tags.split(" | ")))
 
     def _update_remaining(self) -> None:
         used = len(self._message_edit.toPlainText().encode("utf-8"))
