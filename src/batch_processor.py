@@ -14,7 +14,6 @@ from .image_encoder import CapacityError, encode_image
 from .image_decoder import decode_image
 from .jpeg_optimizer import optimize_jpeg
 from .jpeg_v03 import message_fits, max_message_size
-from .error_correction import rs_encode
 from PIL import Image
 
 FORMATS = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".bmp": "BMP", ".webp": "WEBP"}
@@ -49,7 +48,7 @@ def _check_legacy_capacity(cover: Path, fmt: str, payload: bytes, password: str)
         # Legacy AES-CBC wire format: salt(16) + IV(16) + PKCS#7 ciphertext.
         encrypted_size = 32 + 16 * (len(payload) // 16 + 1) if password else len(payload)
         # The encoder Reed-Solomon protects both the 32-byte header and payload.
-        needed = len(rs_encode(bytes(32))) + len(rs_encode(bytes(encrypted_size)))
+        needed = (32 + 64) + encrypted_size + ((encrypted_size + 190) // 191) * 64
         available = width * height * 3 // 8
         if needed > available:
             raise CapacityError(
