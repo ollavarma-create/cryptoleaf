@@ -907,7 +907,7 @@ class _BatchWorker(QThread):
     error = pyqtSignal(str)
 
     def __init__(self, input_dir: str, output_dir: str, payload: bytes,
-                 password: str, dry_run: bool, skip_existing: bool) -> None:
+                 password: str, dry_run: bool, skip_existing: bool, mode: str = "legacy") -> None:
         super().__init__()
         self.input_dir = input_dir
         self.output_dir = output_dir
@@ -915,12 +915,13 @@ class _BatchWorker(QThread):
         self.password = password
         self.dry_run = dry_run
         self.skip_existing = skip_existing
+        self.mode = mode
 
     def run(self) -> None:
         try:
             results = process_batch(
                 self.input_dir, self.output_dir, self.payload, self.password,
-                dry_run=self.dry_run, skip_existing=self.skip_existing,
+                dry_run=self.dry_run, skip_existing=self.skip_existing, mode=self.mode,
                 on_progress=lambda result, done, total: self.progress.emit(result, done, total),
             )
             report = ""
@@ -980,6 +981,19 @@ class BatchTab(QWidget):
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
         password_row.addWidget(self._password)
         root.addLayout(password_row)
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Embedding mode:"))
+        self._mode = QComboBox()
+        self._mode.addItem("Legacy (LSB / JPEG v0.3)", "legacy")
+        self._mode.addItem("Robust (experimental DWT)", "robust")
+        self._mode.setToolTip(
+            "Legacy: high-capacity LSB for lossless images; JPEG v0.3 for JPEG.\\n"
+            "Robust: low-capacity experimental Fourier/DWT transport for all formats.\\n"
+            "Robust does not guarantee survival of social-media recompression."
+        )
+        mode_row.addWidget(self._mode)
+        mode_row.addStretch()
+        root.addLayout(mode_row)
         options = QHBoxLayout()
         self._skip = QCheckBox("Skip existing output files")
         self._dry = QCheckBox("Dry run (no files written)")
@@ -1036,7 +1050,7 @@ class BatchTab(QWidget):
             QMessageBox.warning(self, "Message required", "Enter a message to hide.")
             return
         if not self._password.text():
-            QMessageBox.warning(self, "Password required", "Batch JPEG v0.3 requires a password.")
+            QMessageBox.warning(self, "Password required", "Batch encoding requires a password.")
             return
         self._counts = {"OK": 0, "SKIPPED": 0, "FAIL": 0, "DRY_RUN": 0}
         self._results.clear()
@@ -1047,6 +1061,7 @@ class BatchTab(QWidget):
         self._worker = _BatchWorker(
             str(source), str(destination), message.encode("utf-8"),
             self._password.text(), self._dry.isChecked(), self._skip.isChecked(),
+            self._mode.currentData(),
         )
         self._worker.progress.connect(self._on_progress)
         self._worker.completed.connect(self._on_completed)
