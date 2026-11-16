@@ -24,7 +24,7 @@ PYTHON="${PYTHON:-python}"
 
 test -x "$ROOT/dist/Cryptoleaf.dist/Cryptoleaf"
 rm -rf "$APPDIR"
-mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$APPDIR/usr/share/metainfo" "$ROOT/build"
+mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$APPDIR/usr/share/metainfo" "$APPDIR/usr/share/applications" "$ROOT/build"
 cp -a "$ROOT/dist/Cryptoleaf.dist/." "$APPDIR/usr/bin/"
 
 cat > "$APPDIR/AppRun" <<'EOF'
@@ -35,7 +35,7 @@ exec "$HERE/usr/bin/Cryptoleaf" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
 
-cat > "$APPDIR/cryptoleaf.desktop" <<'EOF'
+cat > "$APPDIR/usr/share/applications/io.github.ollavarma-create.cryptoleaf.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
 Name=Cryptoleaf
@@ -46,6 +46,7 @@ Terminal=false
 Categories=Utility;Security;
 EOF
 
+ln -s "usr/share/applications/io.github.ollavarma-create.cryptoleaf.desktop" "$APPDIR/io.github.ollavarma-create.cryptoleaf.desktop"
 cp "$ROOT/packaging/cryptoleaf.appdata.xml" "$APPDIR/usr/share/metainfo/cryptoleaf.appdata.xml"
 cp "$ROOT/assets/icon.png" "$APPDIR/cryptoleaf.png"
 cp "$ROOT/assets/icon.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/cryptoleaf.png"
