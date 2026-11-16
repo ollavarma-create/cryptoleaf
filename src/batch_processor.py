@@ -17,6 +17,7 @@ from .jpeg_v03 import message_fits, max_message_size
 from .robust_service import encode_message as encode_robust_message, MAX_MESSAGE_BYTES
 from .robust_image import REPEAT, MAX_LONGEST
 from .robust_packet import HEADER_BYTES, PARITY
+from .payload import Payload
 from PIL import ImageOps
 from PIL import Image
 
@@ -91,7 +92,7 @@ def _check_robust_capacity(cover: Path, payload: bytes) -> None:
 def process_batch(
     input_dir: str | Path,
     output_dir: str | Path,
-    payload: bytes,
+    payload: bytes | Payload,
     password: str,
     *,
     quality: int = 85,
@@ -119,8 +120,10 @@ def process_batch(
         raise ValueError("JPEG quality must be between 1 and 100")
     if mode not in {"legacy", "robust"}:
         raise ValueError("mode must be legacy or robust")
+    if isinstance(payload, Payload):
+        payload = payload.data
     if not isinstance(payload, bytes):
-        raise TypeError("payload must be bytes")
+        raise TypeError("payload must be bytes or Payload")
 
     files = sorted((p for p in source.iterdir() if p.is_file() and p.suffix.lower() in FORMATS), key=lambda p: p.name)
     if not dry_run:
