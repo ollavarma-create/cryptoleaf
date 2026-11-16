@@ -655,15 +655,14 @@ class ImageTab(QWidget):
                 )
                 self._capacity_label.setStyleSheet("")
             elif fmt == "JPEG":
-                needed, available = self._jpeg_block_counts()
-                self._current_capacity = 0  # JPEG uses blocks, not LSB bytes
+                # Capacity mode supports JPEG extraction only. Do not present
+                # encoder block requirements as a failure for an opened stego.
+                self._current_capacity = 0
                 self._capacity_label.setText(
-                    f"JPEG v0.3: {available:,} blocks available; "
-                    f"{needed:,} required for current message"
+                    "JPEG: extraction available (Capacity mode). "
+                    "Switch to Robust to hide a new message."
                 )
-                self._capacity_label.setStyleSheet(
-                    "color: #b00020;" if needed > available else ""
-                )
+                self._capacity_label.setStyleSheet("")
             else:
                 bits = capacity_bits(path, output_format=fmt)
                 usable = max(0, bits // 8 - 64)
@@ -692,18 +691,7 @@ class ImageTab(QWidget):
         cap = self._current_capacity
         left = cap - used
         if not self._is_robust() and self._format_combo.currentText() == "JPEG":
-            if self._file_path:
-                try:
-                    needed, available = self._jpeg_block_counts()
-                    self._capacity_label.setText(
-                        f"JPEG v0.3: {available:,} blocks available; "
-                        f"{needed:,} required for current message"
-                    )
-                    self._capacity_label.setStyleSheet(
-                        "color: #b00020;" if needed > available else ""
-                    )
-                except Exception as exc:
-                    logger.warning("JPEG capacity check failed: %s", exc)
+            # This is an extraction-only combination, not a capacity error.
             self._remaining_label.setText(f"Message: {used:,} bytes")
             self._remaining_label.setStyleSheet("")
             return
