@@ -257,6 +257,10 @@ class _ImageDecodeWorker(QThread):
         try:
             data = decode_image(self._stego_path, self._password)
             self.finished.emit(data)
+        except (BadMagicError, ReedSolomonError) as exc:
+            # A valid image encoded with another mode is an expected miss.
+            logger.debug("No legacy image payload detected: %s", exc)
+            self.error.emit(_friendly_decode_error(exc, bool(self._password)))
         except Exception as exc:
             logger.error("Image decoding failed: %s", exc)
             self.error.emit(_friendly_decode_error(exc, bool(self._password)))
