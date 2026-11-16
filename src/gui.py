@@ -680,7 +680,7 @@ class ImageTab(QWidget):
         tags = read_exif_tags(path)
         # Existing EXIF helper provides camera, date and GPS as delimited fields.
         # Keep it as the single parsing source and present fields on separate lines.
-        self._exif_label.setText("\\n".join(tags.split(" | ")))
+        self._exif_label.setText("\n".join(tags.split(" | ")))
         self._exif_label.setVisible(bool(tags))
         self._metadata_title.setVisible(bool(tags))
         self._gps_warning.setVisible(any(part.startswith("📍") for part in tags.split(" | ")))
