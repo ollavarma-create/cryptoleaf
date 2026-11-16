@@ -441,6 +441,18 @@ class ImageTab(QWidget):
         self._capacity_label = QLabel("Capacity: –")
         self._capacity_label.setWordWrap(True)
         left.addWidget(self._capacity_label)
+        self._capacity_help = QLabel(
+            "Robust uses low-capacity experimental DWT embedding; Capacity uses "
+            "high-capacity lossless LSB. Encryption and error correction add overhead. "
+            "Actual success also depends on image size and output format."
+        )
+        self._capacity_help.setWordWrap(True)
+        self._capacity_help.setVisible(False)
+        self._capacity_toggle = QPushButton("Why does capacity change? ▸")
+        self._capacity_toggle.setToolTip("Show the difference between embedding methods.")
+        self._capacity_toggle.clicked.connect(self._toggle_capacity_help)
+        left.addWidget(self._capacity_toggle)
+        left.addWidget(self._capacity_help)
 
         self._exif_label = QLabel("")
         self._exif_label.setWordWrap(True)
@@ -480,12 +492,20 @@ class ImageTab(QWidget):
         self._mode_combo.addItem("Robust – short encrypted messages", "robust")
         self._mode_combo.addItem("Capacity – lossless LSB / legacy decode", "capacity")
         self._mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        self._mode_combo.setToolTip(
+            "Robust: encrypted low-capacity experimental DWT embedding. "
+            "Capacity: lossless LSB for PNG, BMP and WebP; legacy JPEG extraction."
+        )
         form.addRow("Image mode:", self._mode_combo)
 
         self._format_combo = QComboBox()
         self._format_combo.addItems(self._FORMAT_OPTIONS)
         self._format_combo.currentTextChanged.connect(self._on_format_changed)
-        form.addRow("Output format:", self._format_combo)
+        self._format_combo.setToolTip(
+            "Only used when hiding a message. Extraction reads the selected image "
+            "without using this setting."
+        )
+        form.addRow("Output format (hide only):", self._format_combo)
 
         self._jpeg_warning = QLabel(
             "JPEG v0.3: automatic strength optimization (quality 85). "
@@ -512,8 +532,14 @@ class ImageTab(QWidget):
         btn_row = QHBoxLayout()
         self._hide_btn = QPushButton("Hide Message")
         self._hide_btn.clicked.connect(self._hide_message)
+        self._hide_btn.setToolTip(
+            "Embed the message in the selected cover image and save using Output format."
+        )
         self._extract_btn = QPushButton("Extract Message")
         self._extract_btn.clicked.connect(self._extract_message)
+        self._extract_btn.setToolTip(
+            "Recover a message from the selected image. Output format is ignored."
+        )
         btn_row.addWidget(self._hide_btn)
         btn_row.addWidget(self._extract_btn)
         self._cancel_btn = QPushButton("Cancel extraction")
@@ -536,6 +562,13 @@ class ImageTab(QWidget):
         root.addWidget(right_widget, stretch=1)
 
     # --- File selection ---------------------------------------------------------
+
+    def _toggle_capacity_help(self) -> None:
+        visible = not self._capacity_help.isVisible()
+        self._capacity_help.setVisible(visible)
+        self._capacity_toggle.setText(
+            "Why does capacity change? ▾" if visible else "Why does capacity change? ▸"
+        )
 
     def _browse_file(self) -> None:
         last_dir = self._settings.value("last_dir", "", str)
