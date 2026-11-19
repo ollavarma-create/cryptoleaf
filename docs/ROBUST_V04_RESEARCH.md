@@ -1922,6 +1922,115 @@ cutoff remains only one hypothesis and
 previous .48-profile-only experiments did
 not rescue the hard cases.
 
+### Angular-masked Fourier detector: first screenshot LL2 hits (rank-only)
+
+The user supplied `robust-v04-pilot-angular-01.csv`:
+**32 completed rank-only rows**, two covers
+(`cryptoleaf-robust.png` and `P1000450.JPG`),
+pilot .18, LANCZOS 75%/50%, profile cutoffs
+.38/.48, and axis exclusion wedges 0°/5°/10°/20°.
+All **32 oracle-known-size decodes PASS**,
+all `status=OK`, and **all
+`blind_status=NOT_RUN`**. The candidate
+scheduler is the research-only two-stage
+4:10,16:10 search, with up to 160 generated
+sizes per stage (270 unique sizes observed
+after cross-stage deduplication).
+
+**New screenshot geometry discoveries:**
+
+| Received resize | Profile cutoff | Axis exclusion | First safe matching LL2-grid rank | Pilot true-scale local peak rank | Pilot score lift over DWT-only |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 75% | .38 | **5°** | **168** | 12 | +.22317 |
+| 75% | .48 | **5°** | **167** | 11 | +.20105 |
+| 50% | .38 | **20°** | **175** | 7 | +.02281 |
+| 50% | .48 | **20°** | **104** | 12 | +.01518 |
+
+The unmasked .38 baseline had **no matching
+LL2 grid** at either scale. These are the
+first observed matching screenshot geometries
+within this two-stage candidate budget.
+**They do not yet prove packet recovery.**
+A matching LL2 shape does not ensure
+the resized QIM votes recover the payload.
+
+The negative control is important:
+at **75%**, the DWT-only true-scale peak
+ranks **34** and **28** for the two
+5° configurations, versus pilot+DWT
+ranks **12** and **11**, with substantial
+pilot score lift (+.223 and +.201).
+This supports, but does not prove,
+pilot-specific discrimination.
+
+At **50%**, the 20° mask also gives a
+true-scale local peak in the **DWT-only
+negative control** (ranks **10** and
+**14**, compared with pilot+DWT
+ranks **7** and **12**), and the score
+lift is small (+.0228 and +.0152).
+The apparent gain may be due partly to
+natural cover structure. Do **not**
+claim a robust 50% pilot detector
+from these rank-only results.
+
+**Positive control:** `P1000450.JPG`
+retains the correct LL2 grid in all
+16 variants. At 50%, the first matching
+grid ranks **1** throughout; at 75%,
+the grid ranks range **1–11**, so some
+angular masks slow down an already easy
+case. No actual blind decoding was run
+in this CSV.
+
+**Next decisive experiment:** only four
+actual blind decodes of the screenshot,
+holding the pilot, DWT and search budget
+fixed. Use two separate calls so the
+successful rank-only masks are paired
+with their corresponding resize:
+
+```bash
+git pull --ff-only
+
+# Screenshot 75%: both 5-degree variants (2 blind decodes)
+python tools/robust_pilot_angular_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name cryptoleaf-robust.png \
+  --pilot-strengths 0.18 \
+  --scales 0.75 \
+  --axis-exclusions 5 \
+  --profile-max-freqs 0.38,0.48 \
+  --blind \
+  --csv results/robust-v04-angular-blind-screenshot-75-01.csv
+
+# Screenshot 50%: both 20-degree variants (2 blind decodes)
+python tools/robust_pilot_angular_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name cryptoleaf-robust.png \
+  --pilot-strengths 0.18 \
+  --scales 0.5 \
+  --axis-exclusions 20 \
+  --profile-max-freqs 0.38,0.48 \
+  --blind \
+  --csv results/robust-v04-angular-blind-screenshot-50-01.csv
+```
+
+If a screenshot variant actually returns
+`blind_status=PASS`, record decoded
+pixel size and safe attempts; then
+verify the same detector on a wider,
+held-out cover set and the positive
+control before integrating anything
+into production. If all four fail
+despite matching LL2 grids, inspect
+**which candidate pixel dimensions**
+share the true LL2 shape, their order,
+and whether DWT recovery depends on
+sub-grid resampling offsets. A broader
+candidate budget alone should not
+be presumed sufficient.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
