@@ -106,6 +106,62 @@ def _score_at_true(
         return None
 
 
+def evaluate_baseline_only(
+    received: Image.Image,
+    original_size: tuple[int, int],
+    payload: bytes,
+    priors: tuple[float, ...],
+    jitter: int,
+    blind_budget: int,
+) -> dict:
+    """Exhaustive direct decoding, without calculating ANY QIM scores.
+
+    Timed generation and decoder costs are disjoint. Original size is used
+    solely to report post-hoc diagnostic ranks, never to choose a candidate.
+    """
+    start = time.perf_counter()
+    sizes = scale_bank(received.size, priors, jitter)
+    generation_seconds = time.perf_counter() - start
+    result = {
+        "candidate_count": len(sizes),
+        "lattice_control_eligible_count": None,
+        "candidate_generation_seconds": round(generation_seconds, 6),
+        "scoring_seconds": None,
+        "baseline_grid_rank": qim.first_grid_rank(sizes, original_size),
+        "header_grid_rank": None,
+        "wrong_seed_grid_rank": None,
+        "wrong_delta_grid_rank": None,
+        "baseline_exact_rank": _rank(sizes, original_size),
+        "header_exact_rank": None,
+        "header_score_at_true_size": None,
+        "wrong_seed_score_at_true_size": None,
+        "wrong_delta_score_at_true_size": None,
+        "marked_max_header_score": None,
+        "unmarked_max_header_score": None,
+        "unmarked_header_score_at_true_size": None,
+        "unmarked_scoring_seconds": None,
+        "blind_budget": blind_budget,
+        "baseline_blind_status": "NOT_RUN",
+        "baseline_blind_attempts": None,
+        "baseline_blind_decoded_size": None,
+        "baseline_blind_seconds": None,
+        "header_blind_status": "NOT_RUN",
+        "header_blind_attempts": None,
+        "header_blind_decoded_size": None,
+        "header_blind_seconds": None,
+    }
+    if blind_budget:
+        start = time.perf_counter()
+        decoded = qim.decode_budget(received, sizes, payload, blind_budget)
+        result["baseline_blind_status"] = decoded["status"]
+        result["baseline_blind_attempts"] = decoded["attempts"]
+        result["baseline_blind_decoded_size"] = decoded["decoded_size"]
+        result["baseline_blind_seconds"] = round(
+            time.perf_counter() - start, 3
+        )
+    return result
+
+
 def evaluate(
     received: Image.Image,
     original_size: tuple[int, int],
@@ -116,15 +172,22 @@ def evaluate(
     jitter: int = DEFAULT_JITTER,
     blind_budget: int = 0,
     unmarked: Image.Image | None = None,
+    baseline_only: bool = False,
 ) -> dict:
+    if baseline_only:
+        return evaluate_baseline_only(
+            received, original_size, payload, priors, jitter, blind_budget
+        )
     start = time.perf_counter()
     candidates = scale_bank(received.size, priors, jitter)
+    generation_seconds = time.perf_counter() - start
     ranked, meta = qim.rank_sizes(received, candidates, delta, repeat)
     score_seconds = time.perf_counter() - start
     baseline = ranked["baseline"]
     header = ranked["header"]
     result = {
         "candidate_count": len(candidates),
+        "candidate_generation_seconds": round(generation_seconds, 6),
         "lattice_control_eligible_count": meta["lattice_control_eligible_count"],
         "scoring_seconds": round(score_seconds, 3),
         "baseline_grid_rank": qim.first_grid_rank(baseline, original_size),
@@ -192,7 +255,8 @@ def columns() -> list[str]:
         "received_width", "received_height", "resize_scale",
         "pilot_strength", "effective_pilot_strength", "adaptive_pilot",
         "delta", "repeat", "scale_priors", "jitter", "status", "oracle",
-        "candidate_count", "lattice_control_eligible_count",
+        "candidate_count", "candidate_generation_seconds",
+        "lattice_control_eligible_count",
         "baseline_grid_rank", "header_grid_rank",
         "wrong_seed_grid_rank", "wrong_delta_grid_rank",
         "baseline_exact_rank", "header_exact_rank",
@@ -214,6 +278,7 @@ def probe(
     priors: tuple[float, ...] = DEFAULT_PRIORS,
     jitter: int = DEFAULT_JITTER,
     blind_budget: int = 0, unmarked_control: bool = True,
+    baseline_only: bool = False,
 ) -> list[dict]:
     with Image.open(source) as opened:
         reference = reference_image(opened)
@@ -255,11 +320,12 @@ def probe(
                 )
                 unmarked = (
                     reference.resize(received_size, Image.Resampling.LANCZOS)
-                    if unmarked_control else None
+                    if unmarked_control and not baseline_only else None
                 )
+                eval_options = {"baseline_only": True} if baseline_only else {}
                 result = evaluate(
                     received, marked.size, payload, delta, repeat,
-                    priors, jitter, blind_budget, unmarked
+                    priors, jitter, blind_budget, unmarked, **eval_options
                 )
                 oracle = decode_known_at_size(
                     received, marked.size, payload
@@ -296,6 +362,10 @@ def main() -> None:
     parser.add_argument("--jitter", type=int, default=DEFAULT_JITTER)
     parser.add_argument("--no-unmarked-control", action="store_true")
     parser.add_argument("--blind", action="store_true")
+    parser.add_argument(
+        "--baseline-only", action="store_true",
+        help="Decode bank directly with no QIM scoring (fair cost baseline)",
+    )
     parser.add_argument("--decode-budget", type=int, default=40)
     parser.add_argument("--fixed-pilot", action="store_true")
     parser.add_argument(
@@ -314,6 +384,8 @@ def main() -> None:
             raise ValueError("REPEAT must be odd and 1..31")
         if not 0 <= args.jitter <= 4:
             raise ValueError("Jitter must be 0..4 pixels")
+        if args.baseline_only and not args.blind:
+            raise ValueError("--baseline-only requires --blind")
         if not 1 <= args.decode_budget <= 200:
             raise ValueError("Decode budget must be 1..200")
         if args.csv.exists():
@@ -332,7 +404,8 @@ def main() -> None:
     print(
         f"{len(paths)} covers x {len(strengths)} strengths x "
         f"{len(scales)} scales; priors={priors}, jitter={args.jitter}, "
-        f"blind={args.blind}, adaptive={robust.ADAPTIVE_PILOT}",
+        f"blind={args.blind}, baseline_only={args.baseline_only}, "
+        f"adaptive={robust.ADAPTIVE_PILOT}",
         flush=True,
     )
     with args.csv.open("x", newline="", encoding="utf-8") as handle:
@@ -346,6 +419,7 @@ def main() -> None:
                     priors, args.jitter,
                     args.decode_budget if args.blind else 0,
                     not args.no_unmarked_control,
+                    args.baseline_only,
                 )
             except ValueError as exc:
                 print(f"[{index}/{len(paths)}] SKIP {source.name}: {exc}",
