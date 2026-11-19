@@ -2623,6 +2623,64 @@ Do not treat a better true-grid rank as
 proof of better payload recovery, and include
 scoring CPU time in end-to-end cost.
 
+### QIM rank-only diagnostic, 4 covers × 2 strengths × 50% resize
+
+User-supplied `robust-v04-qim-rank-adaptive-01.csv`
+contains **8 OK rows**, all **oracle PASS**, all
+`blind_budget=0` (no actual blind payload recovery).
+Encoder remains adaptive, `DELTA=38`, `REPEAT=13`,
+three frozen Fourier variants, stages `4:10,16:10`.
+The tool generated **468–589** safe candidates per
+case but scored only the **first 240**.
+
+| Cover | Nominal strength | Fourier first true LL2 grid | CLR1-header rank | Lattice rank | Exact pixel-size Fourier → header |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `kulutus-web-anal1.png` | .12 | absent in first 240 | absent | absent | absent → absent |
+| `kulutus-web-anal1.png` | .18 | absent in first 240 | absent | absent | absent → absent |
+| `kulutus-web-vika.png` | .12 | absent in first 240 | absent | absent | absent → absent |
+| `kulutus-web-vika.png` | .18 | absent in first 240 | absent | absent | absent → absent |
+| `appfootprint-main.png` | .12 | 50 | **1** | 1 | 130 → **1** |
+| `appfootprint-main.png` | .18 | 48 | **1** | 1 | 129 → **1** |
+| `P1000450.JPG` | .12 | 1 | 1 | 1 | 1 → 1 |
+| `P1000450.JPG` | .18 | 1 | 1 | 1 | 1 → 1 |
+
+At the first true grid, header correlation is
+**.523021/.509629** for AppFootprint and
+**.827150/.827385** for the photograph.
+Wrong-seed header correlations on AppFootprint are
+**−.052259/−.055032**; wrong-delta correlations
+**.047901/.053125**. This supports a real
+seeded-header signal, but not yet packet recovery.
+The lattice score on AppFootprint is **negative**
+(−.070983/−.056974) even though its rank is 1;
+this rank alone does **not** establish positive
+QIM-lattice contrast. The lattice control was
+eligible for only **21–221** of 240 scored
+candidates per case, which also biases
+comparability across sizes.
+
+Total Fourier candidate generation + 240-size
+scoring time across eight rows: **36.685 s**,
+mean **4.586 s** per row. This is **additional
+ranking cost**; an eventual blind search must
+include it in end-to-end latency comparisons.
+
+**Key limitation:** no ranker can rescue a
+correct size omitted from its candidate pool.
+Four Kulutus-Web cases lack a matching LL2
+grid among the first 240 sizes, but may have
+it later in their frozen 580–589-size pools.
+The next predeclared diagnostic is to rerun
+the **same eight cases** with
+`--max-ranked 640`, which covers the entire
+frozen pool without changing its generation.
+Only after confirming correct-grid inclusion
+and negative-control separation should
+`--blind --decode-budget 40` compare
+independent equal-budget payload recovery
+arms. Neither stage is independent validation:
+these covers were chosen after earlier failures.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
