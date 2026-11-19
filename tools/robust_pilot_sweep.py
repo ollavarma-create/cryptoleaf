@@ -66,6 +66,23 @@ def decode_blind(image: Image.Image, payload: bytes) -> str:
         return "FAIL:" + type(exc).__name__
 
 
+def decode_known_at_size(image: Image.Image, size: tuple[int, int], payload: bytes) -> str:
+    """Test if the resized image still contains recoverable data at true size."""
+    try:
+        actual = robust.decode_at_size(image, size)
+        return "PASS" if actual == payload else "FAIL:payload_mismatch"
+    except ValueError as exc:
+        return "FAIL:" + type(exc).__name__
+
+
+def exact_size_candidate_rank(image: Image.Image, size: tuple[int, int]) -> int | None:
+    """Rank of true original size in blind search; no packet decoding."""
+    for rank, candidate in enumerate(robust.candidate_sizes_priority50(image), 1):
+        if candidate == size:
+            return rank
+    return None
+
+
 def jpeg_roundtrip(image: Image.Image, quality: int) -> Image.Image:
     buf = BytesIO()
     image.save(buf, format="JPEG", quality=quality, subsampling=0)
@@ -147,6 +164,14 @@ def main() -> None:
         for scale in args.blind_scale:
             size = tuple(max(32, round(v * scale)) for v in marked.size)
             scaled = marked.resize(size, Image.Resampling.LANCZOS)
+            # Diagnose whether a blind failure is caused by damaged bits
+            # (oracle fails) or synchronization/search (oracle succeeds).
+            row[f"oracle_scale_{scale:g}"] = decode_known_at_size(
+                scaled, marked.size, payload
+            )
+            row[f"exact_size_rank_{scale:g}"] = exact_size_candidate_rank(
+                scaled, marked.size
+            )
             row[f"blind_scale_{scale:g}"] = decode_blind(scaled, payload)
         rows.append(row)
         print(
@@ -156,7 +181,10 @@ def main() -> None:
             f"PNG={row['png_known']} "
             + " ".join(f"J{q}={row[f'jpeg{q}_known']}" for q in args.jpeg_quality)
             + " " + " ".join(
-                f"blind@{s:g}={row[f'blind_scale_{s:g}']}" for s in args.blind_scale
+                f"oracle@{s:g}={row[f'oracle_scale_{s:g}']} "
+                f"rank={row[f'exact_size_rank_{s:g}']} "
+                f"blind@{s:g}={row[f'blind_scale_{s:g}']}"
+                for s in args.blind_scale
             ),
             flush=True,
         )
@@ -169,7 +197,9 @@ def main() -> None:
             writer.writerows(rows)
         print("CSV:", args.csv)
     print("Saved images and 12x difference maps:", args.out)
-    print("Note: known-size JPEG success does not demonstrate blind scale synchronization.")
+    print("Note: oracle@scale tests true-size DWT recovery after resizing; "
+          "rank is the true size's position in the blind candidate list (None = absent).")
+    print("Known-size JPEG success does not demonstrate blind scale synchronization.")
 
 
 if __name__ == "__main__":
