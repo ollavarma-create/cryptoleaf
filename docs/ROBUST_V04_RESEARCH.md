@@ -709,6 +709,77 @@ and investigate the one-pixel AppFootprint miss. Do not
 change the CLR1 format, production parameters or adaptive
 pilot strength based on this diagnostic alone.
 
+### First two actual blind decoding successes (2026-11-19)
+
+The user supplied two **single-row** actual blind-decode CSVs, both
+using **DELTA=38, REPEAT=13**, pilot strength 0.12, with matched
+experimental codec parameters. These are **actual decodes**, not merely
+size-rank diagnostics:
+
+| CSV | Cover | Resize | Search | True embedded size | Decoded size | Attempts | Outcome |
+| --- | --- | --- | --- | --- | --- | ---: | --- |
+| `robust-v04-blind-actual-75-01.csv` | appfootprint-main.png | 75% (898×508) | Existing production-size search, .70–1.02 | 1198×677 | 1198×677 | 1 | PASS |
+| `robust-v04-blind-actual-50-01.csv` | P1000450.JPG | 50% (640×480) | Research-only extended-size search, .45–1.02 | 1280×960 | 1280×960 | 1 | PASS |
+
+Both also have oracle PASS. Recorded case runtimes are
+0.17 and 0.16 seconds respectively. For the 75% AppFootprint
+case, the unchanged production peak search's best scale is
+**0.750**, and the true size ranks **1**; the widened peak
+search instead ranks a false scale **0.558** first and places
+the true size at **rank 54**. For the 50% P1000450 case,
+the production peak search's best scale is **0.712** and
+does not contain the true size in 160 candidates; the widened
+search ranks **0.500** and the true size **first**.
+
+The original camera image P1000450.JPG is 4000×3000, but
+the codec resampled it to **1280×960 before embedding**.
+The decoder correctly discovers the latter, not the camera
+source dimensions.
+
+**Interpretation:** 38/13 can genuinely decode blind to the
+*encoded* image dimensions in both a 75% and a 50% example,
+with a nonzero Fourier pilot. The 50% result required a
+**research-only** widened search; production has NOT gained
+general 50% blind support. Neither example establishes
+performance across the corpus, and the current production
+on-image 32/9 format remains unchanged. Naively widening
+the peak range can degrade candidate ordering for 75% cases.
+
+**Next discriminating tests using the existing tool** (no
+codec change): examine whether a low-ranked exact size can
+still decode and whether a one-pixel-near size is sufficient.
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_blind_sync_probe.py -q
+
+# Anna Maria at 75%: true size ranked 107/160 with pilot .12
+python tools/robust_blind_sync_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name "Anna Maria Liikanen.jpg" \
+  --pilot-strengths 0.12 --scales 0.75 --blind \
+  --csv results/robust-v04-blind-anna-75-01.csv
+
+# AppFootprint at 50%: widened list is within one pixel,
+# but the exact encoded size is not in the first 160
+python tools/robust_blind_sync_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name appfootprint-main.png \
+  --pilot-strengths 0.12 --scales 0.5 --extended-blind \
+  --csv results/robust-v04-blind-appfootprint-50-01.csv
+```
+
+These may require up to 160 DWT decodes each and take
+longer than the first two one-attempt cases. If the
+one-pixel-near case fails, a **bounded** ±1-pixel neighborhood
+test can be added to the research tool, with strict budgets
+and no oracle-size hint. In parallel, compare a two-band
+pilot peak strategy or a wider radial profile (0.38 currently
+truncates the outermost pilot ring after 50% resize), while
+measuring false peaks and visual distortion. Do not simply
+increase pilot amplitude: the prior rank CSV shows it can
+degrade PSNR substantially without recovering more covers.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
