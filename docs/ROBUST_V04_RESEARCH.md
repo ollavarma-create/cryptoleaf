@@ -294,6 +294,50 @@ reproduced=False because reproduced compares to the **old** matrix.
 All other outcomes should match. Keep the original CSVs as baseline.
 These experiments still do not test blind original-size synchronization.
 
+### One-bit magic repair verified on real covers (2026-11-19)
+
+The user reran `tools/robust_multicover_diagnostics.py` and supplied
+`robust-v04-multicover-errors-02.csv`. All **five predicted** single-bit
+magic recoveries succeeded. Of 24 targeted cases, 20 now pass (15 old passes
+plus five repairs). No previously passing targeted case regressed.
+
+The full 30-cover matrix's implied updated result is **536/540 (99.26%)**,
+up from 531/540 (98.33%), *assuming the unchanged 516 cases retain their
+previous outcomes*. The entire 540-case matrix has **not** been rerun yet.
+All figures refer to **oracle-size** decoding and do not establish blind
+Fourier synchronization.
+
+The remaining four failures, all at 50% Lanczos resizing, are:
+
+| Cover | Pilot | Magic bit errors | Codeword byte errors | Majority bit errors | Near-tie votes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| appfootprint-main.png | 0.00 | 0 | 5 | 5 | 21 |
+| Anna Maria Liikanen.jpg | 0.00 | 2 | 24 | 33 | 89 |
+| Anna Maria Liikanen.jpg | 0.12 | 2 | 22 | 33 | 88 |
+| Anna Maria Liikanen.jpg | 0.18 | 2 | 23 | 34 | 88 |
+
+The 50% appfootprint failure is only **one codeword byte beyond RS8's
+four-byte error-correction budget**, with intact header. A future
+*diagnostic-only* RS erasure-confidence probe may be worthwhile, but a
+correctable erasure pattern must be demonstrated, not assumed. A versioned
+packet change would be required before shipping a different parity scheme.
+
+Anna Maria Liikanen.jpg has 22–24 damaged codeword bytes and two damaged
+magic bits at 50% resize; RS8 erasures alone cannot recover that many
+bytes. The raw repeated-QIM errors after resizing are 1114–1128 and
+near-tie votes 88–89, much worse than the appfootprint failure
+(619 raw QIM errors, 21 near ties). Investigate stronger/repeated
+embedding or content-dependent robustness using paired quality and
+decode measurements; do not assume increasing the Fourier pilot helps.
+For all four cases the initial embedded packet had zero majority-bit
+errors before resizing.
+
+Next: freeze this result, investigate the four remaining 50%-resize
+failures with controlled encoder/decoder-matched DWT parameters, then
+separately test **blind** original-size search on representative covers.
+Do not merge an experimental parameter change into production without
+a backwards-compatible signaling/format plan.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
