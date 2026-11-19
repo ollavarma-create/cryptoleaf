@@ -397,6 +397,53 @@ shipping a new setting requires a versioned signaling/bootstrap plan
 or a carefully bounded compatible decoder search. Do not merge parameter
 changes into production on the basis of this sweep alone.
 
+### DWT one-axis sweep results and next paired experiment
+
+The user supplied `robust-v04-dwt-sweep-01.csv`: **28 rows** covering
+two residual problem images, seven nonbaseline DELTA settings, six
+nonbaseline REPEAT settings, and one baseline per image. The test uses
+fixed pilot 0.0, identical payload, matched decoder parameters and
+known original image size.
+
+- `appfootprint-main.png`: baseline DELTA=32/REPEAT=9 fails at 50%
+  resize (five erroneous RS8 bytes). **32/11 passes** all four
+  PNG/JPEG60/75%/50% tests with PSNR 40.2962 dB vs baseline 40.5537.
+  REPEAT 13/15/17 also pass. DELTA=64/REPEAT=9 passes but PSNR falls
+  to 37.5162 and SSIM to 0.971494. DELTA 28/36 at REPEAT 9 fail even
+  unmodified PNG; parameter changes are non-monotonic.
+- `Anna Maria Liikanen.jpg`: baseline 32/9 fails 50% resize
+  (24 erroneous RS8 bytes). **48/9 passes** all four tests with
+  three erroneous RS8 bytes at 50% resize, PSNR 43.8292 dB and SSIM
+  0.993027 vs baseline 47.0953 dB and 0.996427. DELTA 56/64 also
+  pass. REPEAT increases up to 17 at DELTA 32 do **not** pass 50%.
+- The **only parameter pair tested and shown to pass both covers** is
+  DELTA=64/REPEAT=9. That pair substantially worsens visual quality.
+  The best per-cover pairs are *different*. This is not yet evidence
+  that one good universal pair exists, nor that adaptive per-cover
+  parameter choice is decodable without explicit signaling.
+
+The tool now accepts explicit paired combinations via `--pairs` and
+all 30 local covers via `--all-covers`. Next, search a small
+two-dimensional DELTA/REPEAT neighborhood on the **two** problem covers
+to find a possible common pair with less visual damage:
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_dwt_parameter_sweep.py -q
+python tools/robust_dwt_parameter_sweep.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --pairs 32:9,32:11,40:11,40:13,44:11,44:13,48:9,48:11,48:13,64:9 \
+  --csv results/robust-v04-dwt-pairs-01.csv
+```
+
+This runs 20 encodes (10 matched pairs × two covers), each with four
+oracle-size checks and quality metrics. If one or two lower-distortion
+pairs pass both covers, validate them **across all 30 images** with
+`--all-covers --pairs <candidate1>,<candidate2>` using a new CSV
+name, then separately test blind size discovery. Do not modify the
+production DELTA/REPEAT constants or assume that candidate pairs are
+backward-compatible with the existing format.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
