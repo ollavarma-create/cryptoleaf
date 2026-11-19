@@ -2681,6 +2681,77 @@ independent equal-budget payload recovery
 arms. Neither stage is independent validation:
 these covers were chosen after earlier failures.
 
+### Full frozen Fourier pool: QIM rank diagnostic
+
+The user-supplied `robust-v04-qim-rank-fullpool-01.csv`
+contains 8 complete rank-only rows. All are
+`status=OK`, `oracle=PASS`,
+`blind_budget=0`, `adaptive_pilot=True`.
+The frozen three-mask Fourier search generated
+**468–589** safe pixel-size candidates per row.
+With `max_ranked=640`, **all 4,416 candidates**
+were scored (mean **10.236 s** per row;
+total **81.890 s** for the eight rows).
+
+| Cover | Nominal strength | Full Fourier candidates | True LL2 grid in pool | Header exact-size rank |
+| --- | ---: | ---: | --- | ---: |
+| `kulutus-web-anal1.png` | .12 | 589 | NO | absent |
+| `kulutus-web-anal1.png` | .18 | 582 | NO | absent |
+| `kulutus-web-vika.png` | .12 | 588 | NO | absent |
+| `kulutus-web-vika.png` | .18 | 580 | NO | absent |
+| `appfootprint-main.png` | .12 | 585 | YES (Fourier grid rank 50) | **1** |
+| `appfootprint-main.png` | .18 | 556 | YES (Fourier grid rank 48) | **1** |
+| `P1000450.JPG` | .12 | 468 | YES (Fourier grid rank 1) | **1** |
+| `P1000450.JPG` | .18 | 468 | YES (Fourier grid rank 1) | **1** |
+
+The four Kulutus-Web 50%-resize cases cannot
+be rescued by any reranking of the **unchanged**
+Fourier candidate pool. This is a candidate
+**recall** failure, not evidence that the QIM
+header is incapable of recognizing the true
+dimensions. The exact and LL2-grid sizes are
+absent in all four cases. The AppFootprint
+results still support header discrimination,
+but no actual blind decoding has been run in
+this experiment. The QIM lattice contrast
+is not a validated substitute for the header.
+
+**Predeclared next mechanism test:**
+`tools/robust_qim_scale_bank_probe.py`
+constructs a separate, deterministic,
+Fourier-independent candidate bank from
+received dimensions only, using common
+enlargement factors `1,1.25,4/3,1.5,1.75,2`
+and all ±2-pixel width/height offsets.
+No true encoded dimensions, known resize
+factor, oracle or expected payload are used
+to generate or rank candidate sizes.
+For 50% downsizing the 2× factor is
+obviously relevant; this is an **explicit
+scale-prior experiment**, not proof of
+fully scale-agnostic recovery. The fixed
+priors and offsets are applied to all four
+covers, including two positive controls.
+
+Compare raw scale-bank order with the
+public CLR1-header rerank, and report the
+wrong-seed and wrong-delta scores at the
+exact true size. Independently score
+unmarked source covers downscaled to the
+same received dimensions to characterize
+chance header correlations. The first run
+is **rank-only**; only if true-size inclusion
+and marked-vs-unmarked separation are
+confirmed should `--blind --decode-budget 40`
+be run with identical decoder-call budgets
+for both arms. Candidate scoring and
+unmarked-control CPU time are measured
+separately. This selected dataset is
+development-only, and the method must
+later be tested on untouched covers and
+unknown resize ratios. Production codec
+and Fourier search are unchanged.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
