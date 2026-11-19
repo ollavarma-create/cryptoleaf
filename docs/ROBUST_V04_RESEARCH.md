@@ -3281,6 +3281,86 @@ result on four negative controls is necessary
 but far from sufficient to estimate the
 false-positive rate in deployment.
 
+### Matched unmarked controls at 62%: no validated false positives in four covers
+
+User-supplied `robust-v04-qim-grid-unmarked-062-01.csv`:
+four **unmarked development covers**, resized to
+62%, with the same source SHA256 hashes, received
+dimensions, `min_scale=.5`, `height_jitter=2`,
+`top_grids=5`, `DELTA=38`, `REPEAT=13`
+and maximum 40 decode attempts as the preceding
+marked blind-recovery experiment. The four
+negative-control rows all report
+`decode_status=NO_VALID_PACKET`,
+`any_valid_packet=False`, no decoded size
+or payload length. **0/4 false positives**,
+with **154 actual packet decode attempts**:
+40/40/39/35, the last two exhausting their
+shorter refined shortlists. No valid
+CRC-checked payload was returned at any
+attempted size.
+
+| Unmarked source | Coarse max CLR1 | Refined max CLR1 | Decoder calls | Total s |
+| --- | ---: | ---: | ---: | ---: |
+| `kulutus-web-anal1.png` | .120458 | .148959 | 40 | 7.588322 |
+| `kulutus-web-vika.png` | .128839 | .146908 | 40 | 16.527107 |
+| `appfootprint-main.png` | .156581 | .171035 | 39 | 7.929079 |
+| `P1000450.JPG` | .136206 | .137906 | 35 | 10.133369 |
+
+The **paired marked** run recovered the exact
+payload in **4/4**, with one decoder call each.
+Across these four covers, the smallest marked
+coarse true-grid score is **.254785** and the
+largest unmarked coarse maximum is **.156581**
+(gap **.098204**). The smallest marked refined
+best score is **.721666**, while the largest
+unmarked refined maximum is **.171035**
+(gap **.550632**). These are **development-set
+separations**, not calibrated false-positive
+rates or safe production detection thresholds.
+Note also that a marked image's *wrong* grid
+can score above some unmarked maxima, so a
+score threshold must be evaluated at the
+whole-receiver decision level, not interpreted
+as proof of a correct grid.
+
+Total unmarked run time: **42.177877 s**
+(mean **10.544469 s/case**), comprising
+bank generation **.004877 s**, coarse QIM
+**34.330 s**, refinement **3.948 s**,
+and unsuccessful decoding **3.895 s**.
+The marked run's four successful first-try
+decodes took only **.160 s** in total.
+Rejecting unmarked images cheaply is therefore
+an important future latency problem, but
+any score-gating threshold must first be
+tested for **false rejection of valid payloads**.
+
+**Predeclared next validation (no algorithm changes):**
+use **four or more genuinely new covers not
+used in QIM development**, preferably a mix
+of screenshots, photographs, text-heavy and
+smooth-gradient images. Freeze the current
+`min_scale=.5`, `height_jitter=2`,
+`top_grids=5`, `DELTA=38`,
+`REPEAT=13`, nominal pilot .12,
+and decode budget 40. Run marked and
+matched unmarked arms at off-prior resize
+factors **.55, .68, .83**, recording
+per-case oracle PASS, actual blind payload
+PASS, true-grid rank, refined exact-size
+rank, max coarse/refined score, false
+packet acceptance and full timing.
+Report all failures, including cases where
+the true size was absent from the aspect
+strip or the true grid missed the shortlist.
+Do **not** choose score thresholds or
+change shortlist sizes after seeing the
+new validation outcomes. If candidate
+coverage fails, treat it as a separate
+geometry-search problem rather than
+adjusting the packet decoder.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
