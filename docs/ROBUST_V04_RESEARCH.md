@@ -2282,6 +2282,88 @@ are useful, but any tuning based
 on them must be evaluated on
 a *different* untouched test set.
 
+### Frozen multi-mask detector: independent 25-cover evaluation
+
+After the fixed three-detector cascade was selected on five development
+covers, it was evaluated on 25 new covers, 2 nominal pilot strengths
+(.12/.18) and two separate LANCZOS resizes (75%/50%). Paired
+source hashes and embedding settings matched between the old two-stage
+unmasked cascade and the frozen multi-mask cascade. The small
+\`Leimasin.jpg\` cover was capacity-ineligible for all four conditions,
+leaving **96 eligible cases**. Known-size oracle decoding passed **96/96**.
+
+- Original two-stage blind recovery: **68/96 (70.8%)**.
+- Fixed three-mask blind recovery: **81/96 (84.4%)**.
+- **13 additional successes, zero lost successes**, across eight covers.
+- 75% resize: **44/48 -> 46/48**.
+- 50% resize: **24/48 -> 35/48**.
+- Total safe decoder attempts: **8,974 -> 13,882 (+54.7%)**.
+- This is a **larger-search-budget comparison**, not equal-cost
+  evidence. The two scripts' reported \`seconds\` use different
+  timing boundaries, so they must not be compared directly.
+
+The two white-background, axis-aligned UI screenshots
+\`kulutus-web-anal1.png\` and \`kulutus-web-vika.png\`
+remain difficult at 50% resizing, despite oracle PASS.
+They are now **exploratory diagnostic controls**, not an
+untouched validation set. Their failure is consistent with,
+but does not prove, an axis-energy interference mechanism.
+A fixed detector cannot be retuned on these cases and then
+evaluated as though they were still independent.
+
+### Deterministic synthetic UI orientation experiment
+
+The research-only \`tools/robust_ui_synthetic_covers.py\` creates
+seven same-size, seeded RGB covers (default 960x720):
+
+1. Near-white flat background, RGB(248,248,248)
+2. The same background plus horizontal grey lines
+3. The same background plus vertical grey lines
+4. The same background plus both line orientations
+5. The same grid plus coloured bars
+6. The same background plus spatially correlated greyscale texture
+7. The grid and coloured bars plus the **same** texture
+
+The added texture-only case is necessary to distinguish a
+texture effect from the interaction of texture and grid/bars.
+Optional \`--control\` files are copied **byte-for-byte** into
+the output directory, with SHA256 hashes and basic white/grey
+fractions in \`synthetic-manifest.csv\`. Never commit real user
+images to the repository. The output directory must be empty.
+No embedding or production-code change occurs in the generator.
+
+Suggested independent positive controls:
+\`P1000450.JPG\` and \`appfootprint-main.png\`.
+Suggested difficult controls:
+\`kulutus-web-anal1.png\` and \`kulutus-web-vika.png\`.
+Only the two former were known to be comparatively easy in
+previous pilot tests; none of the controls is an independent
+held-out image after being selected for this experiment.
+
+Generate covers, then run the existing
+\`robust_pilot_angular_probe.py\` with 0/5/20-degree
+exclusions and 0.38/0.48 maximum frequency, at strengths
+.12/.18 and resize factors .75/.5. The angular probe
+already embeds **pilot+DWT** and **DWT-only** negative
+controls, measures true-scale scores and local peak rank,
+and reports the first matching LL2 candidate-grid rank.
+Use \`--blind\` only for bounded follow-up runs; a grid
+rank is **not** successful packet recovery. Separately,
+run the **frozen** \`robust_pilot_multimask_probe.py\`
+for actual blind recovery with the exact fixed
+\`0.38:0,0.38:5,0.48:20\` sequence.
+
+The causal question is whether adding axis-aligned
+structures to a controlled cover reduces true-scale
+pilot detectability, whether the effect differs by
+orientation, and whether the 5/20-degree masks rescue
+it. Also compare DWT-only controls to avoid attributing
+naturally occurring FFT peaks to the pilot. Flat white
+covers may have clipping or capacity/visibility problems;
+record oracle and embedding status before interpreting
+blind failures. Treat synthetic results as **mechanistic
+development diagnostics**, not new generalization rates.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
