@@ -3245,6 +3245,42 @@ Only after these tests should coarse
 scoring speed be optimized. No production
 code changes.
 
+### Matched unmarked controls for blind LL2-grid search (predeclared)
+
+New research-only
+`tools/robust_qim_blind_grid_negative_control.py`
+runs the **same blind grid bank, one-representative
+coarse QIM scoring, top-K grid refinement and
+optional decoder** on the **unmarked** source
+images resized to exactly the same received
+dimensions as the marked images. It does not
+call pilot embedding, payload embedding, or
+an oracle. It records max coarse and refined
+CLR1-header correlations and separate
+coarse/refinement/decoder times.
+
+Crucially, a false positive is counted if
+`robust.decode_at_size` returns **any**
+CRC-validated payload, *not* merely if the
+result equals a known research message.
+`--decode-budget 40` checks the same maximum
+number of ranked sizes as the marked arm.
+The controls are paired by source image and
+resize factor, not statistically independent
+covers. No score threshold is preselected;
+report both raw maxima and packet validation
+outcomes. The tests for this tool are
+committed but require local Fedora execution.
+
+First control run: four development covers
+at .62 scale, `min_scale=.5`, `jitter=2`,
+`top_grids=5`, `DELTA=38`, `REPEAT=13`,
+40 decode attempts. Then repeat on untouched
+covers and several off-prior scales. A clean
+result on four negative controls is necessary
+but far from sufficient to estimate the
+false-positive rate in deployment.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
