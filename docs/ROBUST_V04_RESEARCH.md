@@ -2353,6 +2353,17 @@ run the **frozen** `robust_pilot_multimask_probe.py`
 for actual blind recovery with the exact fixed
 `0.38:0,0.38:5,0.48:20` sequence.
 
+For an orientation-only diagnostic, pass `--fixed-pilot` to
+`robust_pilot_angular_probe.py`: this disables per-cover
+pilot amplitude adaptation **only in that research process**,
+and the CSV records `adaptive_pilot=False`. Without this
+control, changing line density also changes the flat-area
+fraction and thus the effective pilot strength, confounding
+a causal orientation interpretation. The actual frozen
+multi-mask blind benchmark must continue using the default
+adaptive amplitude; fixed-amplitude tests are a separate
+mechanism study, not directly comparable production results.
+
 The causal question is whether adding axis-aligned
 structures to a controlled cover reduces true-scale
 pilot detectability, whether the effect differs by
