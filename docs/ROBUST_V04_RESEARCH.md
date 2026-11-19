@@ -2375,6 +2375,104 @@ record oracle and embedding status before interpreting
 blind failures. Treat synthetic results as **mechanistic
 development diagnostics**, not new generalization rates.
 
+### Measured synthetic UI orientation controls (fixed vs adaptive)
+
+Two user-supplied CSV files, `robust-v04-ui-orientation-fixed-01.csv`
+and `robust-v04-ui-orientation-adaptive-01.csv`, each contain **264**
+complete diagnostic rows: 11 covers, two nominal pilot strengths,
+two independent resize factors, and six detector variants
+(0/5/20 degrees at profile cutoffs .38/.48).
+All rows report `status=OK`, `oracle=PASS`.
+The matching source SHA256 hashes and geometry allow paired comparisons.
+These are **rank-only** tests (`blind_status=NOT_RUN`), not 528
+blind recovery attempts.
+
+A positive `pilot_score_lift_vs_dwt_only` means the
+true-scale spectral correlation exceeds the DWT-only negative control
+at the **same scale**. It is **not** proof that the pilot alone
+caused the strongest peak, and is not a recovered packet.
+A non-null `safe_ll2_grid_rank` means a candidate matching
+the encoded LL2 geometry occurs somewhere in that
+detector's two-stage candidate list; actual decoding was not run.
+
+**Mean true-scale score lift, fixed / adaptive, and LL2 coverage
+of the four unique strength × resize conditions by at least one
+of the six variants:**
+
+| Cover | Lift fixed | Lift adaptive | LL2 cases fixed | LL2 cases adaptive |
+| --- | ---: | ---: | ---: | ---: |
+| 00-flat | +.000 | +.000 | 0/4 | 0/4 |
+| 01-horizontal | -.053 | +.002 | 3/4 | 0/4 |
+| 02-vertical | -.113 | -.051 | 3/4 | 3/4 |
+| 03-grid | -.198 | -.082 | 2/4 | 3/4 |
+| 04-grid-bars | +.076 | +.029 | 3/4 | 2/4 |
+| 05-texture | +.307 | +.306 | 4/4 | 4/4 |
+| 06-grid-bars-texture | +.228 | +.211 | 4/4 | 4/4 |
+| appfootprint-main | +.341 | +.276 | 4/4 | 4/4 |
+| kulutus-web-anal1 | +.324 | +.242 | 3/4 | 2/4 |
+| kulutus-web-vika | +.290 | +.140 | 4/4 | 1/4 |
+| P1000450 | +.570 | +.523 | 4/4 | 4/4 |
+
+Total: **34/44** paired image conditions with an LL2 candidate
+under fixed amplitude, **27/44** under adaptive amplitude,
+when allowing *any* of six detectors. These are **not**
+actual blind decode rates. Nine conditions had LL2 coverage
+only with fixed amplitude, two only with adaptive amplitude;
+therefore disabling adaptation is not a universally better
+setting. The fixed-amplitude research run is not equivalent
+to the current production embedding policy.
+
+In the entirely flat 00-flat image, the pilot-vs-DWT
+true-scale lift is exactly zero in all 24 detector/strength/
+resize combinations, in **both** runs. This is consistent
+with the Fourier-multiplicative pilot being unable to
+create ring-frequency energy where the original image
+has no such energy: a constant image has only DC before
+the DWT embed. The known-size payload still decodes,
+so this is a pilot/synchronisation limitation, not proof
+of lost data.
+
+At fixed amplitude, 01-horizontal, 02-vertical and 03-grid
+have **negative** average pilot lift (-.053, -.113, -.198),
+whereas adding correlated texture yields positive lift
+(+.307 for texture only, +.228 for grid/bars/texture).
+For 01-horizontal at fixed amplitude, the 20-degree
+mask yields an LL2-grid candidate in **6/8** combinations
+(two strengths × two scales × two frequency cutoffs),
+versus **0/8** without an axis mask. For 04-grid-bars
+the corresponding counts are **6/8** versus **0/8**.
+This supports an axis-energy interference hypothesis
+for these synthetic covers, but is not a universal
+result; some real covers are worsened by masking.
+
+The adaptive pilot reduces nominal .12 to .036 on the
+flat image and to about .058 on kulutus-web-vika,
+while textured 05-texture stays near .120.
+This confirms amplitude adaptation is a substantial
+confound in orientation comparisons; fixed-pilot
+controls are therefore useful, but must be judged
+against visible artifacts and real decoding before
+being adopted. The negative control is essential:
+the DWT-only image can itself show scale-like
+Fourier correlations.
+
+**Next experiment (actual blind decoding):**
+run the unchanged three-mask sequence
+`0.38:0,0.38:5,0.48:20` on these 11 covers
+with both the default adaptive pilot and the
+new research-only `--fixed-pilot` switch of
+`tools/robust_pilot_multimask_probe.py`.
+Both runs must use identical payload bytes,
+`DELTA=38`, `REPEAT=13`, and separate CSVs.
+The new `adaptive_pilot` CSV column records
+the mode; neither switch changes production
+codec source. Compare paired payload PASS/FAIL,
+oracle, actual decoder attempts, and recovered
+dimensions; do **not** infer blind success from
+the current LL2 candidate ranks. Do not
+reselect masks on these controls and call the
+result independent validation.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
