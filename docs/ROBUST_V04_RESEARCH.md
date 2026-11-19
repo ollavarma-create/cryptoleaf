@@ -2823,6 +2823,75 @@ results; an untouched set and non-prior
 resize factors are required before
 production consideration. No codec changes.
 
+### Paired blind scale-bank recovery: default vs 2×-first order
+
+Two user-supplied CSVs, `robust-v04-qim-bank-blind-default-01.csv`
+and `robust-v04-qim-bank-blind-2x-first-01.csv`,
+contain eight rows each, paired by source and pilot strength.
+Source SHA256, geometry, `DELTA=38`, `REPEAT=13`,
+adaptive embedding, 50% LANCZOS resize, ±2-pixel
+jitter, candidate count (140–150), oracle results,
+and QIM-ranked exact dimensions are identical across runs.
+All 16 oracle checks PASS. Both runs use 40 decoder
+attempts per arm and omit unmarked controls (already
+tested in the preceding rank-only experiment).
+
+| Arm | Blind payload PASS | Decoder attempts (sum; mean) | Decoder seconds (sum; mean) |
+| --- | ---: | ---: | ---: |
+| Default prior order, no reranking | **0/8** | 320; 40.0 | 3.077; .385 |
+| 2× prior first, no reranking | **8/8** | 28; 3.5 | **.908; .114** |
+| QIM CLR1-header order, default bank | **8/8** | 8; 1.0 | .295; .037 |
+| QIM CLR1-header order, 2×-first bank | **8/8** | 8; 1.0 | .293; .037 |
+
+QIM scoring (which includes candidate-bank generation)
+costs **20.935 s / 8 = 2.617 s** per case with
+default ordering and **21.691 s / 8 = 2.711 s**
+with 2× first. Thus full QIM-ranked recovery
+costs **21.230 s / 8 = 2.654 s** or
+**21.984 s / 8 = 2.748 s**, respectively.
+In this selected 50%-resize test, the direct
+2×-first decoder arm takes only **.114 s/case**,
+about **24× less** than QIM scoring plus recovery
+for that arm. Timings are from sequential runs,
+not isolated paired CPU benchmarks; treat
+differences as indicative, not exact speedup
+guarantees.
+
+Default-bank exact original dimensions appear
+at positions **126–130**, beyond the fixed
+40-attempt limit. In 2×-first bank they appear
+at positions **1, 4 or 5**. All eight QIM-ranked
+dimensions are at position **1**, and all eight
+payloads recover on the first decode. These
+results show **real blind packet recovery
+conditional on a candidate bank containing the
+true original size**, not blind recovery at an
+arbitrary unknown resize factor.
+
+**Important fairness point:** the 2×-first
+baseline has a highly favorable prior because
+every case was downscaled by exactly 50%.
+This is a strong, legitimate control for this
+test but cannot establish general performance
+when the resize factor is unknown. Conversely,
+the default-order baseline's 0/8 is a consequence
+of a 40-attempt budget and its placement of
+2× near the end; it is not evidence that
+unranked exhaustive decoding would fail.
+QIM's real benefit here is **candidate
+discrimination**, not end-to-end speed.
+
+**Next discriminating experiment:** run a
+true baseline-only exhaustive bank decode
+without QIM scoring and measure candidate
+generation + decoding separately; compare
+against QIM total time. Then evaluate
+off-prior resize factors on untouched covers,
+with a predeclared size-search strategy.
+Avoid promoting the QIM method to production
+until both search recall and end-to-end cost
+are validated on an independent dataset.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
