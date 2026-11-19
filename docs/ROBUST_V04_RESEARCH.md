@@ -444,6 +444,50 @@ name, then separately test blind size discovery. Do not modify the
 production DELTA/REPEAT constants or assume that candidate pairs are
 backward-compatible with the existing format.
 
+### Matched two-axis DWT sweep: 20 real-cover encodes
+
+The user supplied `robust-v04-dwt-pairs-01.csv` with **20 OK rows**,
+two covers × ten explicit DELTA:REPEAT pairs, fixed pilot 0.0.
+Of 80 oracle-size decoding attempts, **61 passed** (PNG 20/20,
+JPEG q60 16/20, 75% resize 15/20, 50% resize 10/20).
+
+Only **DELTA=64, REPEAT=9** passes all four transformations on **both**
+covers. It produces zero codeword-byte errors after 50% resize on both,
+but compared with 32/9 the quality cost is large:
+
+| Cover | PSNR 32/9 → 64/9 | SSIM 32/9 → 64/9 | Worst local luma MAE |
+| --- | --- | --- | --- |
+| appfootprint-main.png | 40.5537 → 37.5162 dB | 0.990218 → 0.971494 | 4.7184 → 8.3684 |
+| Anna Maria Liikanen.jpg | 47.0953 → 40.9657 dB | 0.996427 → 0.987796 | 1.7917 → 5.2083 |
+
+The **32/11** pair passes all four for AppFootprint, but fails Anna Maria
+at 50% (16 codeword-byte errors). Conversely, **40/11** passes Anna Maria
+at 50% (3 erroneous codeword bytes, one correctable magic bit), but fails
+AppFootprint at 50% (9 erroneous codeword bytes). All 44/48 combinations
+tested fail AppFootprint at 50%, some even at JPEG q60 or 75% resize.
+This non-monotonic behavior warrants a narrow follow-up search; do not
+adopt 64/9 as a production default yet.
+
+A focused 13-pair experiment includes the four control pairs
+32:11, 40:11, 48:9, 64:9 and nine untested intermediate pairs
+34:11, 36:11, 38:11, 34:13, 36:13, 38:13, 52:9, 56:9, 60:9:
+
+```bash
+git pull --ff-only
+python tools/robust_dwt_parameter_sweep.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --pairs 32:11,34:11,36:11,38:11,40:11,34:13,36:13,38:13,48:9,52:9,56:9,60:9,64:9 \
+  --csv results/robust-v04-dwt-pairs-02.csv
+```
+
+This is 26 encodes (13 pairs × two covers) and 104 known-size
+transformation checks. If any lower-distortion pair passes both
+covers, verify it against the full 30-cover corpus using
+`--all-covers --pairs ...` before moving to blind original-size
+discovery. A candidate passing these two images is not a universal
+result. The blind decoder will also need a nonzero pilot and a
+parameter-discovery or version-signaling strategy.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
