@@ -860,6 +860,109 @@ chosen for diagnostic diversity, not as an unbiased random
 sample. No claim of universal blind recoverability or
 invisibility follows from two or twenty tests.
 
+### Actual blind 5-cover matrix: 20 oracle passes, 10 blind passes
+
+The user supplied `robust-v04-blind-matrix-75-01.csv` and
+`robust-v04-blind-matrix-50-01.csv`: five selected covers ×
+pilot strengths 0.12/0.18 × resize factors 75%/50%, matched
+DWT **38/13**, four independent received images per cover.
+
+- **20/20 oracle-size PASS**: the message survived all tested
+  transforms when the encoded dimensions were supplied.
+- **75%: production-size blind search 6/10 PASS; widened
+  research-size search also 6/10 PASS**, on the exact same
+  cases. Both strengths pass AppFootprint, Anna Maria and
+  P1000450; both fail AarneArmeijassa and cryptoleaf-robust.
+- **50%: widened research-size blind search 4/10 PASS**,
+  both strengths for AppFootprint and P1000450; both fail
+  Anna Maria, AarneArmeijassa and cryptoleaf-robust.
+  The production-size blind decoder was **NOT_RUN** at 50%.
+- Across the **20 distinct cases, 10/20 blind PASS** with
+  the relevant search variant. The 75% standard/extended
+  outcomes are two methods applied to the same ten cases,
+  **not** ten additional independent images.
+
+All ten successful widened blind decodes had **identical
+LL2 grid dimensions** to the true encoded image, even when
+pixel dimensions differed. Four successes were at non-exact
+pixel sizes: Anna Maria 75% at 1280×868 instead of 1280×867
+for both pilot strengths; AppFootprint 50% at 1200×677
+(strength .12) or 1200×678 (strength .18) instead of
+1198×677. The observed results support the *LL2 shape
+hypothesis*, but identical shape is not sufficient evidence
+of successful QIM voting.
+
+| Cover | 75% actual blind, .12/.18 | 50% extended blind, .12/.18 |
+| --- | --- | --- |
+| AppFootprint | PASS 1/1 attempts | PASS 146/120 attempts |
+| Anna Maria Liikanen | PASS 85/1 attempts (production); 72/1 extended | FAIL 74/82 extended attempts |
+| AarneArmeijassa | FAIL both | FAIL both |
+| cryptoleaf-robust | FAIL both | FAIL both |
+| P1000450 | PASS 2/2 attempts | PASS 1/1 attempts |
+
+The difference between an exact-size **candidate rank**
+and actual **decode attempt count** is important: candidates
+with dimensions exceeding MAX_LONGEST=1280 or the pixel cap
+are skipped, and decoding can succeed on a nearby non-exact
+size before the exact candidate. E.g. P1000450 at 75%
+has exact candidate rank 20 but decodes in two safe attempts.
+AppFootprint at 75% strength .12 has extended true-size
+rank 54 despite succeeding in one safe attempt.
+
+Increasing pilot strength from .12 to .18 makes Anna
+Maria 75% succeed in one attempt instead of 85 with the
+production search, but its PSNR falls from **38.4070**
+to **35.6958 dB**; both strengths still fail at 50%.
+Increasing strength does not rescue Aarne or CryptoLeaf.
+Do not change production pilot strength on this evidence.
+
+**Next discriminating experiment:** the strongest pilot
+peak often lies far from the true scale on the failed
+covers (Aarne .894 instead of ~.75; CryptoLeaf .912
+instead of .75). The outermost Fourier ring at .195
+cycles/pixel moves to ~.39 after 50% resizing, beyond
+the current .38 profile limit. Test whether false peaks
+are caused by frequency truncation and/or interference
+from outer pilot rings. The new **research-only**
+`tools/robust_pilot_spectral_ablation.py` compares four
+detectors on identical marked/received images:
+
+| Variant | Pilot rings correlated | Profile max frequency |
+| --- | --- | --- |
+| all38 | All 32 (baseline widened search) | .38 cyc/pixel |
+| inner38 | Only original radii <=.16 | .38 |
+| all48 | All 32 | .48 |
+| inner48 | Only original radii <=.16 | .48 |
+
+All variants use the same 0.45–1.02 scale search,
+Priority50 ordering, max 160 candidates, pilot strengths
+and **unchanged on-image embedding**. The ablation
+reports true-scale correlation, peak ranking, exact-size
+rank and the first safe candidate with the same LL2
+grid. A grid hit is a diagnostic, **not a successful
+decode**. It performs an independent oracle-size
+control but **no blind decode**. A true-size label is
+used only in metrics, not to reorder candidates.
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_pilot_spectral_ablation.py -q
+
+python tools/robust_pilot_spectral_ablation.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --csv results/robust-v04-pilot-spectral-01.csv
+```
+
+The expected output is **80 rows** (five covers ×
+two strengths × two resize scales × four detectors).
+Compare each variant against all38 **on the same cases**.
+If a variant substantially increases same-LL2-grid
+coverage without degrading controls, validate it
+with actual blind decoding before touching production.
+If not, investigate a more discriminative pilot
+template or coarse-to-fine scale estimator instead of
+simply enlarging the candidate budget or amplitude.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
