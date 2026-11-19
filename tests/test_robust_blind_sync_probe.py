@@ -1,0 +1,91 @@
+"""Fast regression tests for Fourier pilot blind-size synchronization probe."""
+import numpy as np
+from PIL import Image
+import pytest
+
+from src import robust_image as robust
+from tools import robust_blind_sync_probe as sync
+
+
+def test_candidate_rank_and_nearest_distance():
+    sizes = [(100, 80), (120, 90), (140, 100)]
+    assert sync.rank_and_distance(sizes, (120, 90)) == (2, 0)
+    assert sync.rank_and_distance(sizes, (121, 92)) == (None, 3)
+    assert sync.rank_and_distance([], (120, 90)) == (None, None)
+
+
+def test_extended_priority50_deduplicates_and_keeps_strongest_first(monkeypatch):
+    def fake_candidates(_received_size, scale, limit):
+        if scale == 0.5:
+            yield from [(200, 160), (201, 160), (202, 160)]
+        else:
+            yield from [(200, 160), (300, 240)]
+    monkeypatch.setattr(robust, "_candidate_sizes", fake_candidates)
+    candidates = sync.priority_candidates_from_peaks(
+        (100, 80), [(0.5, 0.9), (0.75, 0.6)], max_candidates=5
+    )
+    assert candidates == [(200, 160), (201, 160), (202, 160), (300, 240)]
+    assert len(candidates) == len(set(candidates))
+
+
+def test_scale_and_pilot_parsers():
+    assert sync.parse_scales("0.75,0.5,0.75") == [0.75, 0.5]
+    assert sync.parse_strengths("0,0.12,0.18,0") == [0, 0.12, 0.18]
+    for value in ("", "nan", "inf", "0", "1.2"):
+        with pytest.raises(ValueError):
+            sync.parse_scales(value)
+    for value in ("", "nan", "inf", "-0.1", "0.8"):
+        with pytest.raises(ValueError):
+            sync.parse_strengths(value)
+
+
+def test_probe_separates_oracle_and_size_rank(monkeypatch, tmp_path):
+    source = tmp_path / "cover.png"
+    Image.fromarray(
+        np.random.default_rng(1).integers(
+            0, 256, (256, 320, 3), dtype=np.uint8
+        )
+    ).save(source)
+    observed = []
+    original = robust.DELTA, robust.REPEAT
+
+    def fake_embed(image, _packet):
+        observed.append((robust.DELTA, robust.REPEAT))
+        return image
+
+    monkeypatch.setattr(robust, "_feedback_embed", fake_embed)
+    monkeypatch.setattr(robust, "_pilot_embed", lambda image, strength: image)
+    monkeypatch.setattr(
+        sync, "quality_metrics", lambda _a, _b: {
+            "psnr_db": 40, "ssim_y": 0.99,
+        }
+    )
+    monkeypatch.setattr(
+        sync, "decode_known_at_size", lambda _image, _size, _payload: "PASS"
+    )
+    monkeypatch.setattr(sync, "effective_strength", lambda _img, x: x)
+    monkeypatch.setattr(
+        robust, "_peaks",
+        lambda _img, **kwargs: [(0.5 if kwargs else 0.75, 0.8)]
+    )
+    monkeypatch.setattr(
+        robust, "candidate_sizes_priority50",
+        lambda _img, max_candidates: iter([(200, 180)])
+    )
+    monkeypatch.setattr(
+        robust, "_candidate_sizes",
+        lambda _received_size, scale, limit: iter([(320, 256)])
+    )
+
+    rows = sync.probe(
+        source, b"test", [0.0, 0.12], [0.75, 0.5],
+        38.0, 13, 160, False,
+    )
+    assert len(rows) == 4
+    assert all(row["oracle"] == "PASS" for row in rows)
+    assert all(row["standard_true_size_rank"] is None for row in rows)
+    assert all(row["extended_true_size_rank"] == 1 for row in rows)
+    assert all(row["blind_status"] == "NOT_RUN" for row in rows)
+    assert observed == [(38.0, 13), (38.0, 13)]
+    assert (robust.DELTA, robust.REPEAT) == original
+    assert set(rows[0]) == set(sync.columns())
