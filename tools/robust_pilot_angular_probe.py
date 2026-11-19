@@ -266,21 +266,9 @@ def probe(
                             "blind_attempts": attempts,
                             "blind_decoded_size": decoded,
                         }
-                        row.update({
-                            f"pilot_{key.removeprefix('true_scale_')}": value
-                            for key, value in pilot.items()
-                        })
-                        row.update({
-                            f"control_{key.removeprefix('true_scale_')}": value
-                            for key, value in negative.items()
-                        })
-                        # Names in CSV deliberately retain true_scale for
-                        # clarity; use explicit keys, not key rewriting.
                         for prefix, data in (("pilot", pilot), ("control", negative)):
                             for key, value in data.items():
                                 row[f"{prefix}_{key}"] = value
-                        # Discard short aliases: only documented names survive.
-                        row = {key: row.get(key) for key in columns()}
                         rows.append(row)
     return rows
 
