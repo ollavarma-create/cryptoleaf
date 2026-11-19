@@ -1807,6 +1807,121 @@ signal over further strength increases.
 Aarne 50% requires separate research:
 its adaptive attenuation is negligible.
 
+### Adaptive versus fixed pilot: screenshot remains 0/8 blind
+
+The user supplied
+`robust-v04-pilot-adaptation-screenshot-01.csv`:
+**eight completed rows**, CryptoLeaf screenshot
+720×697, two pilot strengths (.12/.18), two
+received resizes (75%/50%), and both adaptive
+and fixed pilot amplitude. All eight
+oracle-known-size decodes **PASS**; all eight
+actual two-stage blind searches
+(`4:10,16:10`) **FAIL:not_recovered**.
+DELTA=38, REPEAT=13, 160 candidates per stage.
+
+| Received resize | Nominal pilot | Adaptive true-scale local peak rank | Fixed rank | Blind adaptive / fixed |
+| --- | ---: | ---: | ---: | --- |
+| 75% | .12 | 29 | **16** | FAIL / FAIL |
+| 75% | .18 | 17 | **13** | FAIL / FAIL |
+| 50% | .12 | no peak ±.01 | no peak ±.01 | FAIL / FAIL |
+| 50% | .18 | no peak ±.01 | no peak ±.01 | FAIL / FAIL |
+
+At 75%, fixed amplitude increases true-scale
+pilot+DWT correlation score and improves the
+local-peak rank, but **not** actual recovery.
+At 50%, the closest local peak remains
+**.012** away from the true scale in every
+case, despite stronger pilot score. These
+results rule out *adaptive attenuation alone*
+as a sufficient explanation for the screenshot
+failures under this detector and budget.
+
+Image quality of the **encoded** (pre-received-
+resize) marked images:
+
+| Nominal pilot | Adaptive PSNR / SSIM-Y | Fixed PSNR / SSIM-Y |
+| --- | --- | --- |
+| .12 | **38.5107 dB / .962585** | 38.1912 dB / .961112 |
+| .18 | **38.2882 dB / .961615** | 37.6504 dB / .957670 |
+
+Thus fixed .18 incurs **−.6378 dB** PSNR and
+**−.003945** SSIM-Y, with no blind recovery
+gain on this cover. PSNR/SSIM do not establish
+visual acceptability by themselves. Keep the
+adaptive mode as the research baseline;
+do **not** change production settings.
+
+**Next discriminating hypothesis:** UI screenshots
+have strong horizontal/vertical edge structure,
+creating dominant Fourier energy along the
+frequency axes. The current radial detector
+averages all orientations and can bury a weak
+isotropic pilot in axis-aligned cover energy.
+A new **research-only** diagnostic
+`tools/robust_pilot_angular_probe.py`
+excludes 0°, 5°, 10° or 20° wedges near
+the horizontal/vertical Fourier axes before
+radial bin averaging. It compares both
+`max_freq=.38` (exact original baseline
+at 0° exclusion) and `.48` (includes outer
+rings after 50% resizing).
+
+For each variant, measure the true-scale
+correlation and local peak rank on both
+**pilot+DWT** and **DWT-only negative control**,
+plus the first correct LL2-grid candidate
+rank in the same 4:10,16:10 search. Known
+scale/size are used only for diagnostics;
+the detector and candidates do not use them.
+No Fourier pilot embedding, packet encoding,
+or production decoding changes.
+
+```bash
+git pull --ff-only
+python -m pytest \
+  tests/test_robust_pilot_angular_probe.py \
+  tests/test_robust_pilot_adaptation_probe.py -q
+
+# Initial 32 rank-only variants, no costly blind decodes:
+python tools/robust_pilot_angular_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name cryptoleaf-robust.png \
+  --name P1000450.JPG \
+  --pilot-strengths 0.18 \
+  --scales 0.75,0.5 \
+  --axis-exclusions 0,5,10,20 \
+  --profile-max-freqs 0.38,0.48 \
+  --csv results/robust-v04-pilot-angular-01.csv
+```
+
+Expected **32 rows** (two covers × one pilot
+strength × two scales × four masks × two
+frequency cutoffs). The successful P1000450
+cover is an essential positive control:
+a detector that improves the screenshot but
+breaks P1000450 is not a general improvement.
+The 0°/.38 variant should reproduce the
+existing baseline ranks and score for the
+same image. **These are candidate-ranking
+diagnostics, not actual blind decodes.**
+If a variant generates a correct LL2-grid
+candidate in the screenshot, run a narrow
+follow-up with `--blind` for actual packet
+recovery, and then expand to held-out covers
+and image-quality checks before considering
+any production integration.
+
+If angular masking does not improve the
+screenshot without damaging the positive
+control, stop tuning this radial detector
+and consider a redesigned synchronization
+signal or a fundamentally different
+blind scale estimator. The outer-ring
+cutoff remains only one hypothesis and
+previous .48-profile-only experiments did
+not rescue the hard cases.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
