@@ -3116,6 +3116,71 @@ Next test on independent covers and
 multiple off-prior scales; no production
 changes.
 
+### First genuinely blind LL2-grid candidate search: 62% resize
+
+User-supplied `robust-v04-qim-blind-grid-062-01.csv`:
+four **development** covers, nominal pilot strength
+.12, 62% LANCZOS resize, adaptive pilot,
+`DELTA=38`, `REPEAT=13`,
+`--min-scale .5 --height-jitter 2 --top-grids 5`.
+All four rows are `status=OK`, `oracle=PASS`,
+`blind_budget=0`, `blind_status=NOT_RUN`.
+The candidate bank and coarse/refined QIM scores
+were generated without any original-size or
+resize-factor oracle. Encoded dimensions are
+used only **after** scoring for diagnostics and
+the separate oracle verification.
+
+| Cover | All pixel candidates | LL2 grids | Coarse true-grid rank | True-grid representative score | Best wrong-grid score | Refined sizes | Exact-size rank | Coarse+refine+bank seconds |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `kulutus-web-anal1.png` | 2435 | 285 | **1** | .792332 | .133924 | 62 | **1** | 5.909442 |
+| `kulutus-web-vika.png` | 2705 | 357 | **1** | .902162 | .151600 | 33 | **1** | 13.327079 |
+| `appfootprint-main.png` | 2690 | 325 | **1** | .587984 | .136155 | 41 | **1** | 7.099049 |
+| `P1000450.JPG` | 2435 | 305 | **1** | .254785 | .167170 | 49 | **1** | 10.108366 |
+
+**4/4** original LL2 grids rank first in the
+coarse sweep; **4/4** exact original pixel
+sizes rank first in the selected-grid
+refinement. The photo's coarse-grid margin
+is only **.087615**, substantially smaller
+than the screenshot margins (.451829–.750562);
+its score rises to **.843953** at the exact
+pixel size. Thus scoring one representative
+per LL2 grid appears promising, but there
+is **no demonstrated universal coarse-score
+threshold** and no unmarked-image false
+positive control for this wide grid search.
+
+Bank generation takes ~**.0012 s/case**.
+Across four cases, coarse scoring takes
+**32.179 s** and within-grid refinement
+**4.260 s**, total **36.444 s** (mean
+**9.111 s/case**). Coarse scoring is
+~**88.3%** of measured search time.
+The run scored 1,272 grid representatives
+plus the uncached portion of 185 refined
+candidate sizes. The method is currently
+substantially slower than the previous
+50%-resize scale-bank QIM and direct
+decoding baselines, which are **not**
+directly comparable on recovery rate
+because those experiments used a different
+resize factor and candidate geometry.
+
+**Next experiment:** rerun the same four
+62%-resize cases with `--blind
+--decode-budget 40`, keeping all geometry
+and ranking parameters fixed. Report
+actual payload recovery, decoder attempts,
+and end-to-end time (bank + coarse + refine
++ decode). The 4/4 oracle outcomes are
+**not** blind payload recoveries. After
+confirmation, test predeclared off-prior
+resize factors and untouched source
+images, including unmarked controls, before
+claiming general robustness. No production
+code changes.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
