@@ -211,6 +211,42 @@ Blind original-size estimation and pilot synchronization should be evaluated
 as a separate stage, based on this matrix's cover/quality failures and
 representative cases. A 5/5 result on one cover does not generalize.
 
+### Four failed-cover types at 50% resize: working hypothesis
+
+In the 30-cover CSV, 531/540 oracle-size tests passed. The nine failures
+were limited to four covers: Anna Maria Liikanen.jpg, Anna Pitkänen 1864.jpg,
+appfootprint-main.png, and cryptoleaf-robust.png. All but one failure occurred
+at 50% Lanczos resize; the exception was pilot-free cryptoleaf-robust.png
+at 75%. All four covers have fine high-contrast lines/text and substantial
+uniform regions, but that visual similarity is not a proven cause: other
+covers with sharp edges passed. Failures were not monotonic in pilot strength,
+and no common source dimension threshold is evident.
+
+The CSV stores only FAIL:ValueError; it cannot distinguish damaged CLR1 magic,
+multiple header bit errors, RS8 codeword corruption exceeding four bytes, or
+other decode failures. Do not modify the pilot or DWT parameters on this
+evidence alone.
+
+To reproduce the failing covers and compare **passing controls on the same
+covers** at both 75% and 50%, without saving any marked images:
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_multicover_diagnostics.py -q
+python tools/robust_multicover_diagnostics.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --matrix results/robust-v04-multicover-01.csv \
+  --csv results/robust-v04-multicover-errors-01.csv
+```
+
+This reproduces 4 covers × 3 pilot strengths × 2 resize scales = 24
+diagnostic rows and records raw QIM errors, majority bit errors, CLR1
+magic and length bit errors, and codeword byte errors. RS8 can correct
+up to four corrupted codeword bytes. The reported oracle result is based
+on the current production decoder (including the one-bit length fallback).
+The test is deterministic but requires the original input images, not
+messaging-service resized copies.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
