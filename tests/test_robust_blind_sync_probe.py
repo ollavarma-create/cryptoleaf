@@ -28,6 +28,36 @@ def test_extended_priority50_deduplicates_and_keeps_strongest_first(monkeypatch)
     assert len(candidates) == len(set(candidates))
 
 
+def test_research_first_peak_quota_matches_baseline_and_round_robin(monkeypatch):
+    def fake_candidates(_received_size, scale, limit):
+        if scale == 0.5:
+            yield from [(100, 100), (101, 100), (102, 100)]
+        else:
+            yield from [(200, 200), (201, 200), (202, 200)]
+
+    monkeypatch.setattr(robust, "_candidate_sizes", fake_candidates)
+    monkeypatch.setattr(
+        robust, "_peaks",
+        lambda _img: [(0.5, 0.9), (0.75, 0.6)],
+    )
+    image = Image.new("RGB", (80, 80))
+    peaks = [(0.5, 0.9), (0.75, 0.6)]
+    baseline = list(robust.candidate_sizes_priority50(image, max_candidates=4))
+    assert sync.priority_candidates_from_peaks(
+        image.size, peaks, max_candidates=4
+    ) == baseline == [(100, 100), (101, 100), (102, 100), (200, 200)]
+    assert sync.priority_candidates_from_peaks(
+        image.size, peaks, max_candidates=4, first_peak_quota=0
+    ) == [(100, 100), (200, 200), (101, 100), (201, 200)]
+    assert sync.priority_candidates_from_peaks(
+        image.size, peaks, max_candidates=4, first_peak_quota=2
+    ) == [(100, 100), (101, 100), (102, 100), (200, 200)]
+    with pytest.raises(ValueError):
+        sync.priority_candidates_from_peaks(
+            image.size, peaks, max_candidates=4, first_peak_quota=-1
+        )
+
+
 def test_extended_blind_decodes_only_from_candidates(monkeypatch):
     image = Image.new("RGB", (160, 120))
     payload = b"correct payload"
