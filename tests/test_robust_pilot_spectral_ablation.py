@@ -39,6 +39,17 @@ def test_inner_rings_are_subset_and_scores_are_finite():
     assert not np.allclose(full, inner)
 
 
+def test_peak_budget_parser_and_nearest_local_peak_diagnostic():
+    assert spectral.parse_peak_counts("4,8,12,4") == [4, 8, 12]
+    for value in ("", "0", "65", "foo", "4,"):
+        with pytest.raises(ValueError):
+            spectral.parse_peak_counts(value)
+    peaks = [(0.89, 0.7), (0.75, 0.6), (0.5, 0.4)]
+    assert spectral.nearest_peak_diagnostic(peaks, 0.749) == (2, 0.001)
+    assert spectral.nearest_peak_diagnostic(peaks, 0.72) == (None, 0.03)
+    assert spectral.nearest_peak_diagnostic([], 0.75) == (None, None)
+
+
 def test_ll2_grid_matches_real_wrong_size_successes():
     assert spectral.same_ll2_shape((1198, 677), (1200, 677))
     assert spectral.same_ll2_shape((1198, 677), (1200, 678))
@@ -98,5 +109,41 @@ def test_probe_writes_four_variants_without_blind_decode(monkeypatch, tmp_path):
     }
     assert all(r["oracle"] == "PASS" for r in rows)
     assert all(set(r) == set(spectral.columns()) for r in rows)
+    assert all(r["max_peaks"] == 4 for r in rows)
+    assert all("true_scale_local_peak_rank" in r for r in rows)
     assert observed == [(38.0, 13)]
     assert (robust.DELTA, robust.REPEAT) == original
+
+
+def test_probe_multiple_peak_budgets_preserves_encoded_image(monkeypatch, tmp_path):
+    source = tmp_path / "cover.png"
+    Image.fromarray(
+        np.random.default_rng(2).integers(
+            0, 256, (64, 80, 3), dtype=np.uint8
+        ),
+        "RGB",
+    ).save(source)
+    embed_calls = []
+    monkeypatch.setattr(
+        robust, "_feedback_embed",
+        lambda image, _packet: (embed_calls.append(image.size), image)[1],
+    )
+    monkeypatch.setattr(robust, "_pilot_embed", lambda image, strength: image)
+    monkeypatch.setattr(
+        spectral, "decode_known_at_size",
+        lambda _image, _size, _payload: "PASS"
+    )
+    monkeypatch.setattr(
+        robust, "_profile",
+        lambda _image, bins, max_freq: np.random.default_rng(10).normal(size=bins)
+    )
+    rows = spectral.probe(
+        source, b"payload", [0.0, 0.12], [0.75],
+        peak_counts=[4, 8, 12], variants=("all38",)
+    )
+    assert len(rows) == 6
+    assert {r["max_peaks"] for r in rows} == {4, 8, 12}
+    assert {r["variant"] for r in rows} == {"all38"}
+    assert all(set(r) == set(spectral.columns()) for r in rows)
+    assert len(embed_calls) == 2
+    assert all(r["oracle"] == "PASS" for r in rows)
