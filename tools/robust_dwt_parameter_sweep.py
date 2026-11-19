@@ -89,6 +89,24 @@ def parameter_grid(
     ]
 
 
+def parse_pairs(value: str) -> list[tuple[str, float, int]]:
+    """Explicit matched DELTA:REPEAT combinations; preserve user order."""
+    pairs = []
+    seen = set()
+    for token in value.split(","):
+        parts = token.strip().split(":")
+        if len(parts) != 2:
+            raise ValueError("--pairs must be comma-separated DELTA:REPEAT pairs")
+        delta = parse_deltas(parts[0])[0]
+        repeat = parse_repeats(parts[1])[0]
+        if (delta, repeat) not in seen:
+            seen.add((delta, repeat))
+            pairs.append(("pair", delta, repeat))
+    if not pairs:
+        raise ValueError("--pairs requires at least one DELTA:REPEAT pair")
+    return pairs
+
+
 def columns() -> list[str]:
     return [
         "source", "source_sha256", "source_width", "source_height",
@@ -187,6 +205,15 @@ def main() -> None:
     parser.add_argument("--deltas", default="24,28,32,36,40,48,56,64")
     parser.add_argument("--repeats", default="5,7,9,11,13,15,17")
     parser.add_argument(
+        "--pairs",
+        help="Explicit DELTA:REPEAT combinations, e.g. 32:9,40:11,48:13; "
+             "overrides --deltas/--repeats one-axis sweep",
+    )
+    parser.add_argument(
+        "--all-covers", action="store_true",
+        help="Test every PNG/JPEG in the input directory (default: two covers)",
+    )
+    parser.add_argument(
         "--pilot", type=float, default=0.0,
         help="Fixed nominal Fourier pilot strength for ALL cases (default: 0)",
     )
@@ -202,10 +229,20 @@ def main() -> None:
     try:
         if not math.isfinite(args.pilot) or not 0 <= args.pilot <= 0.5:
             raise ValueError("--pilot must be finite and between 0 and 0.5")
-        deltas = parse_deltas(args.deltas)
-        repeats = parse_repeats(args.repeats)
-        grid = parameter_grid(deltas, repeats)
-        paths = image_paths(args.directory, args.name or list(DEFAULT_NAMES))
+        if args.pairs is not None:
+            grid = parse_pairs(args.pairs)
+        else:
+            deltas = parse_deltas(args.deltas)
+            repeats = parse_repeats(args.repeats)
+            grid = parameter_grid(deltas, repeats)
+        if args.all_covers and args.name:
+            raise ValueError("--all-covers and --name cannot be combined")
+        paths = image_paths(
+            args.directory,
+            None if args.all_covers else (args.name or list(DEFAULT_NAMES)),
+        )
+        if not paths:
+            raise ValueError("No supported input images found")
         payload = args.message.encode("utf-8")
         packet = pack(payload)
         if args.csv.exists():
