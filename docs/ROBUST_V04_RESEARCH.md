@@ -247,6 +247,53 @@ on the current production decoder (including the one-bit length fallback).
 The test is deterministic but requires the original input images, not
 messaging-service resized copies.
 
+### Measured 24-case diagnostics: eight magic errors and one RS8 failure
+
+The user's robust-v04-multicover-errors-01.csv reproduced **all 24**
+expected outcomes (four covers, three pilot strengths, two scales).
+Of nine failures, **eight** had damaged CLR1 magic and one had intact
+header but five erroneous RS codeword bytes. The 16-bit length was
+correct in all nine failures.
+
+- cryptoleaf-robust.png: four failures (one at 75%, three at 50%);
+  **one magic bit** wrong, 0–1 codeword bytes wrong
+- Anna Pitkänen 1864.jpg: one failure at 50%, strength 0.18;
+  **one magic bit** wrong, two codeword bytes wrong
+- appfootprint-main.png: one failure at 50%, strength 0;
+  intact magic and length, **five codeword bytes** wrong
+- Anna Maria Liikanen.jpg: three failures at 50%;
+  **two magic bits** wrong, **22–24 codeword bytes** wrong;
+  33–34 majority-voted bits wrong overall
+
+A **bounded one-bit CLR1 magic recovery** was added to the decoder, analogous
+to the previously validated one-bit length repair. If the observed magic
+differs by exactly one bit from CLR1, the decoder substitutes CLR1 only as
+a candidate, then requires RS8 correction and CRC32 validation. The fast
+path, encoder, stored format, seed, DWT, and Fourier pilot are unchanged.
+The decoder still rejects two-bit magic damage. This should recover the
+five cases with one magic-bit error and <=4 codeword-byte errors, yielding
+**536/540** oracle-size successes if verified on the user's machine.
+It cannot repair the four cases that exceed the RS8 budget.
+
+Run regression tests and rerun the *same* multicover matrix with a new CSV
+name to verify the prediction. Do not compare the new matrix's failures
+as though they were independent trials; the covers, packet, and transformations
+are deliberately identical:
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_header_repair.py tests/test_robust_multicover_diagnostics.py -q
+python tools/robust_multicover_diagnostics.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --matrix results/robust-v04-multicover-01.csv \
+  --csv results/robust-v04-multicover-errors-02.csv
+```
+
+In the rerun, five improved cases should show oracle PASS and
+reproduced=False because reproduced compares to the **old** matrix.
+All other outcomes should match. Keep the original CSVs as baseline.
+These experiments still do not test blind original-size synchronization.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
