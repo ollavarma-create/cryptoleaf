@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Research-only staged Fourier blind search; never changes the production codec.
 
-The fixed default cascade tries 4 peaks/quota 10, then 4 peaks/quota 50
-(the original extended-search baseline), then 16 peaks/quota 10. Each
-stage receives at most 160 independently ranked size candidates. Duplicate
+The measured default cascade tries 4 peaks/quota 10, then 16 peaks/quota
+10. The optional 4:50 stage remains available for regression experiments.
+Each stage receives at most 160 independently ranked size candidates. Duplicate
 PIXEL dimensions across stages are decoded only once; different dimensions
 with the same LL2 shape are retained because resampling can affect QIM
 recovery. The total search budget is therefore larger than a single
@@ -40,7 +40,7 @@ from tools.robust_pilot_sweep import (
 from tools.robust_quality_compare import quality_metrics
 
 
-DEFAULT_STAGES = ((4, 10), (4, 50), (16, 10))
+DEFAULT_STAGES = ((4, 10), (16, 10))
 
 
 def parse_stages(value: str) -> tuple[tuple[int, int], ...]:
@@ -249,7 +249,7 @@ def main() -> None:
     )
     parser.add_argument("--pilot-strengths", default="0.12,0.18")
     parser.add_argument("--scales", default="0.75,0.5")
-    parser.add_argument("--stages", default="4:10,4:50,16:10")
+    parser.add_argument("--stages", default="4:10,16:10")
     parser.add_argument("--max-candidates-per-stage", type=int, default=160)
     parser.add_argument("--delta", type=float, default=38.0)
     parser.add_argument("--repeat", type=int, default=13)
