@@ -12,7 +12,7 @@ def test_known_magic_soft_parity_recovers_seeded_header():
     rng = np.random.default_rng(773)
     repeat = 13
     delta = 38.0
-    ll = rng.normal(0, 115, size=(100, 100))
+    ll = rng.normal(0, 115, size=(200, 200))
     positions = np.random.default_rng(robust.SEED).permutation(ll.size)
     bits = np.unpackbits(np.frombuffer(MAGIC, dtype=np.uint8))
     q = np.where(np.repeat(bits, repeat) == 1, 3.0, 2.0)
@@ -28,7 +28,7 @@ def test_known_magic_soft_parity_recovers_seeded_header():
 
 
 def test_flat_cover_scores_finite_and_uninformative():
-    scores = qim.score_ll2(np.full((80, 80), 992.0), 38.0, 13)
+    scores = qim.score_ll2(np.full((200, 200), 992.0), 38.0, 13)
     assert scores["lattice"] == pytest.approx(0, abs=1e-12)
     assert scores["header"] == pytest.approx(0, abs=1e-12)
     assert scores["wrong_seed_header"] == pytest.approx(0, abs=1e-12)
@@ -103,6 +103,7 @@ def test_evaluate_blind_equal_budget_and_no_oracle_in_ranker(monkeypatch):
                 for _ in sizes
             ],
             "scored_count": len(sizes),
+            "lattice_control_eligible_count": len(sizes),
         }
     monkeypatch.setattr(qim, "rank_sizes", ranker)
     calls = []
@@ -145,6 +146,7 @@ def test_rank_only_does_not_decode(monkeypatch):
                     for _ in sizes
                 ],
                 "scored_count": 2,
+                "lattice_control_eligible_count": 2,
             },
         ),
     )
