@@ -161,3 +161,17 @@ def test_probe_oracle_only_after_rank(monkeypatch, tmp_path):
     writer.writeheader()
     writer.writerows(rows)
     assert "coarse_true_grid_rank" in buffer.getvalue()
+
+
+
+def test_invalid_and_nonfinite_header_scores_are_ranked_last(monkeypatch):
+    image = Image.new("RGB", (60, 40))
+
+    def fake_score(received, size, delta, repeat):
+        if size == (60, 40):
+            raise ValueError("insufficient capacity")
+        return {"header": float("nan")}
+
+    monkeypatch.setattr(sweep.qim, "score_size", fake_score)
+    assert sweep._header_score(image, (60, 40), 38, 13) == float("-inf")
+    assert sweep._header_score(image, (64, 44), 38, 13) == float("-inf")
