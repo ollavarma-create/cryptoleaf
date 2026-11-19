@@ -963,6 +963,89 @@ If not, investigate a more discriminative pilot
 template or coarse-to-fine scale estimator instead of
 simply enlarging the candidate budget or amplitude.
 
+### Pilot spectral ablation results: 80/80 oracle PASS, no coverage gain
+
+The user supplied `robust-v04-pilot-spectral-01.csv`:
+five representative covers × pilot strengths .12/.18 ×
+75%/50% resizing × four spectral detectors = **80 rows**,
+all `status=OK`, all `oracle=PASS`. No actual blind
+decoding was performed in this experiment.
+
+Number of received-image cases with **at least one safe
+candidate matching the true encoded LL2 grid** among the
+first 160 Fourier candidates:
+
+| Detector | 75% | 50% | Total (20 unique images) |
+| --- | ---: | ---: | ---: |
+| all38 (widened baseline) | 6/10 | 4/10 | **10/20** |
+| inner38 | 5/10 | 4/10 | 9/20 |
+| all48 | 5/10 | 4/10 | 9/20 |
+| inner48 | 6/10 | 4/10 | **10/20** |
+
+The same two hard covers, **AarneArmeijassa.jpg** and
+**cryptoleaf-robust.png**, have zero LL2 grid hits in
+either resize condition for all four detectors. Anna
+Maria at 50% also has zero. Changing the frequency
+ceiling from .38 to .48 or removing outer rings is
+**not** sufficient to improve coverage. For AppFootprint
+at 50% pilot .18, all48/inner48 move the first matching
+LL2 grid from safe candidate **88** to **10**, a useful
+per-case ordering gain but not a coverage gain. On
+Anna Maria 75% pilot .12, all48/inner38 lose a grid
+hit that all38/inner48 retain; detector improvements
+are not monotonic.
+
+For all38, the true-scale correlation percentile
+on Aarne at 75% is **91.26–92.66** (plausibly pruned
+by top-four-peak selection), but at 50% only
+**64.34–65.73**. CryptoLeaf at 50% is **40.91–47.20**,
+and its true-scale correlation is negative. These
+percentiles do NOT establish that the true scale is
+a local correlation maximum; increasing the number
+of selected peaks might help 75% Aarne but cannot
+be assumed to help 50% cases. A weak or absent
+true-scale peak is a distinct problem from candidate
+budgeting.
+
+**Next controlled diagnostic, without changing
+production:** the spectral tool now supports
+`--peak-counts` (e.g. 4,8,12) and `--variants`,
+and reports the true scale's **local-peak rank**
+(if a peak is within ±.01 scale units) and distance
+to the nearest local peak. It also accepts
+`--pilot-strengths 0,0.12,0.18` with a matched
+YCbCr roundtrip for the zero-pilot negative control.
+The encoded dimensions are only used to label
+the output, never to generate candidate sizes.
+All peak budgets use the same total 160-candidate
+cap, so this measures peak selection rather than
+unbounded brute force.
+
+```bash
+git pull --ff-only
+python -m pytest \
+  tests/test_robust_pilot_spectral_ablation.py -q
+
+python tools/robust_pilot_spectral_ablation.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --variants all38 \
+  --pilot-strengths 0,0.12,0.18 \
+  --scales 0.75,0.5 \
+  --peak-counts 4,8,12 \
+  --csv results/robust-v04-pilot-topk-01.csv
+```
+
+Expected **90 rows** (5 covers × 3 pilot strengths ×
+2 resize factors × 3 peak budgets × 1 detector).
+First check whether 8/12 peaks add LL2-grid hits on
+the hard covers, and whether the corresponding
+true-scale peak is distinguishable from the pilot=0
+control. Then decide whether a focused real blind
+test is warranted. The zero-pilot control may have
+nonzero correlations due to cover structure and
+DWT modifications; do not interpret a high raw
+score as pilot proof without comparing controls.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
