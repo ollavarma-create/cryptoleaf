@@ -2155,6 +2155,133 @@ Do not merge research into the
 production codec based on these
 exploratory tests.
 
+### Fixed multi-mask blind search: 18/20, five net recoveries
+
+The user supplied
+`robust-v04-blind-multimask-01.csv`
+(**20 complete rows**). Compared case by case
+against
+`robust-v04-blind-cascade-two-stage-01.csv`
+using the same five covers, two pilot
+strengths (.12/.18), LANCZOS 75%/50%,
+DELTA38/REPEAT13, source SHA256,
+marked-image quality and oracle.
+All **20/20 known-size oracle decodes PASS**,
+all statuses `OK`, and all source hashes,
+image sizes, effective strengths, marked
+PSNR and SSIM match the baseline.
+
+**Actual blind recovery: 18/20 (90%)**
+versus **13/20 (65%)** with the
+original two-stage unmasked detector.
+**Five newly recovered cases, zero
+regressions** in this fixed 20-case
+exploratory corpus. The first
+`0.38:0` variant reproduces all
+**13 original successes**, with exactly
+the same safe attempt counts and
+decoded pixel sizes. Fixed detector
+order (independent of received resize
+and cover): `0.38:0,0.38:5,0.48:20`;
+each uses 4:10 then 16:10, with
+up to 160 candidate sizes per stage.
+Pixel sizes are deduplicated globally.
+
+| Newly recovered case | Resize | Pilot | Successful detector | Cumulative safe decoder attempts | Decoded dimensions |
+| --- | ---: | ---: | --- | ---: | --- |
+| Anna Maria Liikanen.jpg | 50% | .12 | `0.38:5` | 214 | 1280×867 |
+| AarneArmeijassa.jpg | 50% | .12 | `0.48:20` | 332 | 273×391 |
+| cryptoleaf-robust.png | 50% | .12 | `0.48:20` | 460 | 719×697 |
+| cryptoleaf-robust.png | 75% | .18 | `0.38:5` | 351 | 720×697 |
+| cryptoleaf-robust.png | 50% | .18 | `0.48:20` | 450 | 719×697 |
+
+All decoded payloads match the expected
+bytes; the 719×697 screenshot decodes
+share the original 720×697 LL2 grid.
+By received resize, recovery rises
+from **8/10 to 9/10** at 75% and
+**5/10 to 9/10** at 50%.
+By pilot strength, recovery rises
+from **6/10 to 9/10** at .12 and
+**7/10 to 9/10** at .18.
+The additional successful detectors
+are `0.38:5` in two cases and
+`0.48:20` in three cases.
+
+**Two remaining blind failures:**
+
+- `AarneArmeijassa.jpg`, 50%, pilot .18:
+  **374** safe attempts, three detectors
+  tried (207 + 84 + 83).
+- `cryptoleaf-robust.png`, 75%, pilot .12:
+  **594** safe attempts, three detectors
+  tried (270 + 139 + 185).
+
+Both oracle decodes PASS, so these
+are still synchronization/search
+failures, not proof of payload
+destruction.
+
+**Search cost is materially larger:**
+across the 20 paired cases, cumulative
+safe decoder attempts increase from
+**2,374 to 3,475 (+46.4%)**; summed
+measured blind-search durations from
+**31.722 s to 48.667 s (+53.4%)**.
+These are one-run measurements,
+not replicated performance estimates.
+The new 90% figure must **not** be
+presented as an equal-budget comparison.
+The two-stage baseline permits at most
+320 generated candidates before
+deduplication; the three-mask cascade
+permits up to 960. Easy cases
+exit early, often in 1–2 attempts;
+hard cases can require hundreds
+(e.g. 594 and 460).
+
+**Scientific limitations:** masks
+were selected after exploring these
+five covers, so the 18/20 result
+is *development-set performance*,
+not independent generalization
+evidence or a production-ready
+success probability. Resizes were
+separate LANCZOS transforms; no
+combined JPEG+resize, crop,
+platform recompression or screenshot
+edits have been validated by this
+result. Original embedding,
+adaptive amplitude and DWT packet
+are unchanged. No production codec
+changes or merge are warranted yet.
+
+**Recommended next phase:**
+freeze this exact three-mask
+detector and test previously
+unseen covers of diverse dimensions,
+content types, aspect ratios and
+flat-region proportions. Run the
+original two-stage cascade and
+new multi-mask search on identical
+input images and fixed payloads,
+compare paired PASS/FAIL,
+safe attempts and duration.
+Use exact `--name` options to
+select new filenames in each
+tool; the default names select
+the original five development
+covers. Only after held-out
+testing should further masks,
+early stopping, cost caps or
+combined JPEG+resize tests
+be considered. Separate
+exploratory rank-only diagnostics
+on the two remaining failures
+are useful, but any tuning based
+on them must be evaluated on
+a *different* untouched test set.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
