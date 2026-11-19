@@ -160,7 +160,7 @@ def columns() -> list[str]:
     return [
         "source", "source_sha256", "encoded_width", "encoded_height",
         "received_width", "received_height", "resize_scale",
-        "pilot_strength", "effective_pilot_strength", "delta", "repeat",
+        "pilot_strength", "effective_pilot_strength", "adaptive_pilot", "delta", "repeat",
         "variants", "stages", "per_stage_candidate_limit", "status",
         "oracle", "marked_psnr_db", "marked_ssim_y",
         "blind_status", "blind_attempts", "blind_decoded_size",
@@ -235,6 +235,7 @@ def probe(
                     "received_height": received.height,
                     "resize_scale": scale,
                     "pilot_strength": strength,
+                    "adaptive_pilot": robust.ADAPTIVE_PILOT,
                     "effective_pilot_strength": round(
                         effective_strength(reference, strength), 6
                     ),
@@ -267,6 +268,10 @@ def main() -> None:
     parser.add_argument("--delta", type=float, default=38.0)
     parser.add_argument("--repeat", type=int, default=13)
     parser.add_argument(
+        "--fixed-pilot", action="store_true",
+        help="Research only: disable per-cover adaptive pilot amplitude",
+    )
+    parser.add_argument(
         "--message", default="CryptoLeaf v0.4 fixed-packet pilot sweep"
     )
     args = parser.parse_args()
@@ -293,6 +298,8 @@ def main() -> None:
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
 
+    if args.fixed_pilot:
+        robust.ADAPTIVE_PILOT = False
     args.csv.parent.mkdir(parents=True, exist_ok=True)
     print(
         f"{len(paths)} covers × {len(strengths)} strengths × "
