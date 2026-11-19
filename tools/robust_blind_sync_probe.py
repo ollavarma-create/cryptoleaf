@@ -130,6 +130,25 @@ def decode_from_candidates(
     return "FAIL:not_recovered", attempts, None
 
 
+def decoded_size_metrics(
+    decoded_size: str | None, encoded_size: tuple[int, int],
+) -> tuple[int | None, int | None, bool | None]:
+    """Pixel-size offsets and whether the two-level Haar LL grid is identical.
+
+    With periodization the LL2 dimensions are ceil(height/4), ceil(width/4).
+    Identical LL2 shape preserves the seeded coefficient permutation, though
+    it does not by itself guarantee successful QIM decoding.
+    """
+    if not decoded_size:
+        return None, None, None
+    w, h = (int(v) for v in decoded_size.split("x"))
+    ew, eh = encoded_size
+    same_ll2 = ((w + 3) // 4, (h + 3) // 4) == (
+        (ew + 3) // 4, (eh + 3) // 4
+    )
+    return w - ew, h - eh, same_ll2
+
+
 def parse_scales(value: str) -> list[float]:
     try:
         values = [float(part.strip()) for part in value.split(",")]
@@ -164,8 +183,12 @@ def columns() -> list[str]:
         "extended_candidate_count", "extended_true_size_rank",
         "extended_nearest_size_distance_px",
         "blind_status", "blind_attempts", "blind_decoded_size",
+        "blind_width_error_px", "blind_height_error_px",
+        "blind_same_ll2_shape",
         "extended_blind_status", "extended_blind_attempts",
-        "extended_blind_decoded_size", "seconds",
+        "extended_blind_decoded_size",
+        "extended_blind_width_error_px", "extended_blind_height_error_px",
+        "extended_blind_same_ll2_shape", "seconds",
     ]
 
 
@@ -294,6 +317,20 @@ def probe(
                         row["blind_status"] = "FAIL:" + type(exc).__name__
                 else:
                     row["blind_status"] = "NOT_RUN"
+                (
+                    row["blind_width_error_px"],
+                    row["blind_height_error_px"],
+                    row["blind_same_ll2_shape"],
+                ) = decoded_size_metrics(
+                    row["blind_decoded_size"], marked.size
+                )
+                (
+                    row["extended_blind_width_error_px"],
+                    row["extended_blind_height_error_px"],
+                    row["extended_blind_same_ll2_shape"],
+                ) = decoded_size_metrics(
+                    row["extended_blind_decoded_size"], marked.size
+                )
                 row["seconds"] = round(time.perf_counter() - started, 2)
                 rows.append(row)
     return rows
