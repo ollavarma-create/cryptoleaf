@@ -3463,6 +3463,51 @@ from grid candidate selection (blind).
 No production changes until robustness
 and visual quality are assessed.
 
+### JPEG-after-resize paired blind-grid probe (implementation, not yet run)
+
+Research-only `tools/robust_qim_blind_grid_jpeg_probe.py`
+and `tests/test_robust_qim_blind_grid_jpeg_probe.py`
+have been added. The test harness has not been
+executed in this environment; run pytest on Fedora
+before using the probe.
+
+Frozen experiment: six previously held-out
+covers (now **JPEG-transform development**
+covers), nominal adaptive pilot .12, scales
+`.55,.68,.83`, JPEG quality `85,70`,
+**4:2:0** chroma subsampling, fixed
+transform order **LANCZOS resize → JPEG
+recompression**, `DELTA=38`,
+`REPEAT=13`, `min_scale=.5`,
+`height_jitter=2`, `top_grids=5`,
+40 decoder attempts. Each source/scale/
+quality pair produces one marked row and
+one unmarked row, totaling **72 rows** for
+six covers. Both arms are JPEG recompressed
+with the same geometry and quality. The
+marked arm reports the separate oracle
+result and blind payload recovery, including
+true-grid rank and exact-size rank.
+The unmarked arm treats **any** validated
+packet as a false positive, regardless
+of payload. No code changes to the
+production codec.
+
+**Interpret failures by stage:** if
+`oracle != PASS`, payload did not
+survive the simulated JPEG transform even
+at the known original dimensions, so
+optimizing size search cannot repair it.
+If `oracle=PASS` but blind decode fails,
+inspect grid shortlist and refined
+exact-size ranks to identify search
+failure. The experimental resize-then-JPEG
+pipeline is **not** proof of compatibility
+with any specific social-media platform;
+actual platforms may crop, rescale,
+recompress, strip metadata or apply
+other transformations.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
