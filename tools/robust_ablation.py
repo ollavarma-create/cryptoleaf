@@ -39,11 +39,15 @@ def prepare_reference(image: Image.Image) -> Image.Image:
 def stages(reference: Image.Image, payload: bytes) -> dict[str, Image.Image]:
     """Recreate encode's pilot and DWT steps, without stochastic encryption."""
     packet = pack(payload)
+    ycbcr_control = reference.convert("YCbCr").convert("RGB")
     pilot = robust._pilot_embed(reference)
     return {
-        "ycbcr_control": reference.convert("YCbCr").convert("RGB"),
+        "ycbcr_control": ycbcr_control,
         "pilot_only": pilot,
         "dwt_only": robust._feedback_embed(reference, packet),
+        # A second color conversion without a pilot: isolates pipeline
+        # round-trip effects from the actual Fourier modulation.
+        "ycbcr_then_dwt": robust._feedback_embed(ycbcr_control, packet),
         "pilot_and_dwt": robust._feedback_embed(pilot, packet),
     }
 
@@ -98,10 +102,12 @@ def main() -> None:
         "ycbcr_control": args.out / "ablation-ycbcr.png",
         "pilot_only": args.out / "ablation-pilot.png",
         "dwt_only": args.out / "ablation-dwt.png",
+        "ycbcr_then_dwt": args.out / "ablation-ycbcr-then-dwt.png",
         "pilot_and_dwt": args.out / "ablation-full.png",
         "pilot_vs_control": args.out / "ablation-pilot-vs-control-diff.png",
         "dwt_vs_reference": args.out / "ablation-dwt-vs-reference-diff.png",
         "full_vs_reference": args.out / "ablation-full-vs-reference-diff.png",
+        "full_vs_ycbcr_dwt": args.out / "ablation-full-vs-ycbcr-dwt-diff.png",
     }
     existing = [str(path) for path in output_paths.values() if path.exists()]
     if existing:
@@ -113,7 +119,7 @@ def main() -> None:
     rows = []
     for name, candidate in results.items():
         row = {"stage": name, **quality_metrics(reference, candidate)}
-        if name in {"dwt_only", "pilot_and_dwt"}:
+        if name in {"dwt_only", "ycbcr_then_dwt", "pilot_and_dwt"}:
             row["png_oracle"] = decode_result(candidate, payload)
             for quality in args.jpeg_quality:
                 row[f"jpeg{quality}_oracle"] = jpeg_result(candidate, payload, quality)
@@ -134,6 +140,8 @@ def main() -> None:
     for name, a, b in (
         ("pilot vs YCbCr control", results["ycbcr_control"], results["pilot_only"]),
         ("DWT vs YCbCr control", results["ycbcr_control"], results["dwt_only"]),
+        ("YCbCr then DWT vs DWT only", results["dwt_only"], results["ycbcr_then_dwt"]),
+        ("full vs YCbCr then DWT", results["ycbcr_then_dwt"], results["pilot_and_dwt"]),
         ("full vs pilot-only", results["pilot_only"], results["pilot_and_dwt"]),
     ):
         m = quality_metrics(a, b)
@@ -146,6 +154,7 @@ def main() -> None:
     diff_image(results["ycbcr_control"], results["pilot_only"]).save(output_paths["pilot_vs_control"])
     diff_image(reference, results["dwt_only"]).save(output_paths["dwt_vs_reference"])
     diff_image(reference, results["pilot_and_dwt"]).save(output_paths["full_vs_reference"])
+    diff_image(results["ycbcr_then_dwt"], results["pilot_and_dwt"]).save(output_paths["full_vs_ycbcr_dwt"])
     print(f"\nSaved images and 12x difference maps to: {args.out}")
 
     if args.csv:
