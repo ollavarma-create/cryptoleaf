@@ -192,3 +192,82 @@ def test_probe_csv_schema_and_oracle_after_scoring(monkeypatch, tmp_path):
     writer.writeheader()
     writer.writerows(rows)
     assert "unmarked_max_header_score" in output.getvalue()
+
+
+
+def test_baseline_only_exhaustive_decode_skips_qim_ranking(monkeypatch):
+    received = Image.new("RGB", (640, 288))
+    sizes = [(800, 360), (960, 432), (1280, 577)]
+    monkeypatch.setattr(
+        scale, "scale_bank",
+        lambda received_size, priors, jitter: sizes
+    )
+    monkeypatch.setattr(
+        scale.qim, "rank_sizes",
+        lambda *args: pytest.fail("baseline-only invoked QIM scoring"),
+    )
+    calls = []
+
+    def fake_decode(image, size):
+        calls.append(size)
+        if size == sizes[2]:
+            return b"payload"
+        raise ValueError("wrong size")
+
+    monkeypatch.setattr(robust, "decode_at_size", fake_decode)
+    result = scale.evaluate(
+        received, sizes[2], b"payload",
+        blind_budget=10, baseline_only=True
+    )
+    assert calls == sizes
+    assert result["baseline_blind_status"] == "PASS"
+    assert result["baseline_blind_attempts"] == 3
+    assert result["baseline_exact_rank"] == 3
+    assert result["header_blind_status"] == "NOT_RUN"
+    assert result["scoring_seconds"] is None
+    assert result["candidate_generation_seconds"] >= 0
+    assert set(result).issubset(set(scale.columns()))
+
+
+def test_baseline_only_probe_skips_unmarked_control(monkeypatch, tmp_path):
+    source = tmp_path / "cover.png"
+    Image.fromarray(
+        np.random.default_rng(12).integers(
+            0, 255, size=(64, 80, 3), dtype=np.uint8
+        ), "RGB"
+    ).save(source)
+    monkeypatch.setattr(
+        robust, "_pilot_embed",
+        lambda image, strength: image.convert("YCbCr").convert("RGB")
+    )
+    monkeypatch.setattr(
+        robust, "_feedback_embed", lambda image, packet: image
+    )
+    monkeypatch.setattr(
+        scale, "decode_known_at_size",
+        lambda received, size, payload: "PASS"
+    )
+    seen = []
+
+    def fake_evaluate(received, original_size, payload, delta, repeat,
+                      priors, jitter, blind_budget, unmarked, baseline_only):
+        seen.append((baseline_only, unmarked, blind_budget))
+        return {
+            key: None for key in scale.columns()
+            if key not in {
+                "source", "source_sha256", "encoded_width",
+                "encoded_height", "received_width", "received_height",
+                "resize_scale", "pilot_strength",
+                "effective_pilot_strength", "adaptive_pilot",
+                "delta", "repeat", "scale_priors", "jitter",
+                "status", "oracle",
+            }
+        }
+
+    monkeypatch.setattr(scale, "evaluate", fake_evaluate)
+    rows = scale.probe(
+        source, b"payload", strengths=[0.12], scales=[0.5],
+        blind_budget=200, baseline_only=True
+    )
+    assert seen == [(True, None, 200)]
+    assert set(rows[0]) == set(scale.columns())
