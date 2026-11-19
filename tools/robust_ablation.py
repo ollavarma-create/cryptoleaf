@@ -11,6 +11,10 @@ import argparse
 import csv
 from io import BytesIO
 from pathlib import Path
+import sys
+
+# Allow "python tools/robust_ablation.py" from the repository root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 from PIL import Image, ImageOps
