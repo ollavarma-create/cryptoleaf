@@ -96,7 +96,7 @@ def test_pair_uses_matched_parameters_and_records_controls(monkeypatch):
     assert row["after50_magic_bit_errors"] == 0
     assert row["after50_length_bit_errors"] == 0
     assert row["capacity_used_pct"] > 0
-    assert observed and all(pair == (40, 11) for _, *pair in observed)
+    assert observed and all((delta, repeat) == (40, 11) for _, delta, repeat in observed)
     assert (robust.DELTA, robust.REPEAT) == before
 
 
