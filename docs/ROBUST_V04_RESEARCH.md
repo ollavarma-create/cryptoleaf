@@ -2473,6 +2473,93 @@ the current LL2 candidate ranks. Do not
 reselect masks on these controls and call the
 result independent validation.
 
+### Paired UI blind decoding: adaptive versus fixed pilot
+
+Two further CSVs supplied after the rank-only experiment,
+`robust-v04-ui-blind-adaptive-01.csv` and
+`robust-v04-ui-blind-fixed-01.csv`, contain **44 matched rows
+each**: the same 11 covers × 2 strengths × 2 resize factors.
+Source SHA256, encoded/received geometry, payload settings
+(`DELTA=38`, `REPEAT=13`), three detector variants
+(`0.38:0,0.38:5,0.48:20`), stage sequence
+(`4:10,16:10`) and per-stage budget all match.
+All 88 rows are `status=OK`, `oracle=PASS`.
+
+| Metric | Adaptive (production research default) | Fixed (research-only) |
+| --- | ---: | ---: |
+| Blind payload PASS | **23/44 (52.3%)** | **30/44 (68.2%)** |
+| 75% resize | 14/22 | 15/22 |
+| 50% resize | 9/22 | 15/22 |
+| Pilot strength .12 | 11/22 | 13/22 |
+| Pilot strength .18 | 12/22 | 17/22 |
+| Total safe decoder attempts | 13,724 | 11,268 |
+| Blind search seconds (single run) | 249.875 | 192.165 |
+| Mean marked PSNR | 40.927 dB | 39.827 dB |
+| Mean marked SSIM-Y | .970908 | .959137 |
+
+Pairwise contingency: **22 successes in both**, **13 failures
+in both**, **8 fixed-only successes**, and **1 adaptive-only
+success**. Net improvement **+7/44 = +15.9 percentage
+points**. Total safe decoder attempts decreased **17.9%**;
+measured search time decreased **23.1%**, in this one run
+of the same tool with the same timing boundary. The
+latency advantage is partly due to earlier successful
+termination, not necessarily faster individual attempts.
+
+| Cover | Adaptive PASS /4 | Fixed PASS /4 |
+| --- | ---: | ---: |
+| 00-flat.png | 0 | 0 |
+| 01-horizontal.png | 0 | 1 |
+| 02-vertical.png | 1 | 3 |
+| 03-grid.png | 1 | 0 |
+| 04-grid-bars.png | 2 | 3 |
+| 05-texture.png | 4 | 4 |
+| 06-grid-bars-texture.png | 4 | 4 |
+| appfootprint-main.png | 4 | 4 |
+| kulutus-web-anal1.png | 2 | 3 |
+| kulutus-web-vika.png | 1 | 4 |
+| P1000450.JPG | 4 | 4 |
+
+The most striking real-screen case is
+`kulutus-web-vika.png`: with the fixed pilot, all
+four payloads decode, including both 50% resized
+versions. At 50% and nominal strength .18 the
+fixed case passes in **3** safe attempts versus
+adaptive FAIL after **580**. The adaptive amplitude
+on that cover is only .057954 at nominal .12 and
+.086930 at nominal .18, versus the fixed .12/.18.
+The only regression is `03-grid.png`, 75% resize,
+nominal strength .18: adaptive PASS in 286 attempts,
+fixed FAIL after 444.
+
+The quality cost is measurable: mean marked PSNR
+drops **1.10 dB** and mean SSIM-Y drops **.01177**
+when fixed amplitude replaces adaptation. On
+`03-grid.png`, strength .18, PSNR drops from
+40.7305 to 37.7061 dB and SSIM-Y from .958981
+to .917568. This is not evidence that such
+changes are imperceptible. On the entirely
+flat image, fixed and adaptive marked PSNR and
+SSIM are identical, and neither recovers blindly:
+the Fourier pilot is **multiplicative** in
+frequency space, so it cannot create non-DC
+frequencies in a perfectly constant image.
+
+**Interpretation:** amplitude attenuation explains
+part of the difficulty on flat/UI covers, but
+simply disabling adaptation has an observable
+fidelity cost and is not monotonic (one regression).
+The present 11-cover experiment is a **mechanism
+study selected after observing failures**, not
+independent validation of a new production default.
+Keep the adaptive production setting and frozen
+three-mask search unchanged while investigating
+decoder-only synchronization (robust radial
+statistics, QIM-lattice candidate ranking) and
+a more selective, perceptually constrained
+amplitude rule. A later untouched image set and
+JPEG+resize channel must validate any change.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
