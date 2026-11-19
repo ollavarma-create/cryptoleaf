@@ -5,11 +5,13 @@ and Priority50 blind size search. This is not a secrecy or steganalysis guarante
 Do not change parameters without a new paired robustness benchmark.
 
 Visibility notes (2026-11):
-* QIM uses symmetric nearest-parity quantisation (_nearest_parity). The old
-  upward-only parity fix biased every touched 4x4 block by +DELTA/2 in LL2
-  (+4 luma) and allowed max 1.5*DELTA/4 = 12/255 steps. The symmetric choice
-  halves worst-case distortion to DELTA/2/4 = 4/255 and removes the DC bias.
-  Decode is unchanged (parity only); re-run the paired robustness benchmark.
+* QIM uses nearest-parity quantisation (_nearest_parity). Unlike the
+  old upward-only parity fix, it selects the closest target-parity lattice
+  point. The maximum initial coefficient adjustment is DELTA, corresponding
+  to roughly DELTA/4 luma per pixel for one isolated LL2 Haar coefficient
+  (before clipping/color conversion); it is NOT limited to DELTA/2.
+  The exact distortion depends on the cover and feedback. Decode still
+  reads lattice parity; paired robustness and compatibility need testing.
 * Pilot amplitude is adapted per cover from the flat-area fraction. This is
   decoder-transparent: _peaks normalises the sign correlation, so amplitude
   carries no signalling. Spatial gating must NOT be used: it would broaden
