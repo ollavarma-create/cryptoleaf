@@ -50,6 +50,17 @@ def test_peak_budget_parser_and_nearest_local_peak_diagnostic():
     assert spectral.nearest_peak_diagnostic([], 0.75) == (None, None)
 
 
+def test_first_peak_quota_parser_and_unique_safe_ll2_grids():
+    assert spectral.parse_first_peak_quotas("0,10,25,50,10") == [0, 10, 25, 50]
+    for value in ("", "-1", "1001", "abc", "0,"):
+        with pytest.raises(ValueError):
+            spectral.parse_first_peak_quotas(value)
+    assert spectral.unique_safe_ll2_grids([
+        (1198, 677), (1200, 678), (1201, 677),
+        (1280, 960), (1500, 1000),
+    ]) == 3
+
+
 def test_ll2_grid_matches_real_wrong_size_successes():
     assert spectral.same_ll2_shape((1198, 677), (1200, 677))
     assert spectral.same_ll2_shape((1198, 677), (1200, 678))
@@ -110,6 +121,8 @@ def test_probe_writes_four_variants_without_blind_decode(monkeypatch, tmp_path):
     assert all(r["oracle"] == "PASS" for r in rows)
     assert all(set(r) == set(spectral.columns()) for r in rows)
     assert all(r["max_peaks"] == 4 for r in rows)
+    assert all(r["first_peak_quota"] == 50 for r in rows)
+    assert all(r["unique_safe_ll2_grids"] >= 0 for r in rows)
     assert all("true_scale_local_peak_rank" in r for r in rows)
     assert observed == [(38.0, 13)]
     assert (robust.DELTA, robust.REPEAT) == original
@@ -146,4 +159,39 @@ def test_probe_multiple_peak_budgets_preserves_encoded_image(monkeypatch, tmp_pa
     assert {r["variant"] for r in rows} == {"all38"}
     assert all(set(r) == set(spectral.columns()) for r in rows)
     assert len(embed_calls) == 2
+    assert {r["first_peak_quota"] for r in rows} == {50}
     assert all(r["oracle"] == "PASS" for r in rows)
+
+
+def test_probe_quota_sweep_does_not_reencode_per_quota(monkeypatch, tmp_path):
+    source = tmp_path / "cover.png"
+    Image.fromarray(
+        np.random.default_rng(3).integers(
+            0, 256, (64, 80, 3), dtype=np.uint8
+        ),
+        "RGB",
+    ).save(source)
+    calls = []
+    monkeypatch.setattr(
+        robust, "_feedback_embed",
+        lambda image, _packet: (calls.append(image.size), image)[1],
+    )
+    monkeypatch.setattr(robust, "_pilot_embed", lambda image, strength: image)
+    monkeypatch.setattr(
+        spectral, "decode_known_at_size",
+        lambda _image, _size, _payload: "PASS"
+    )
+    monkeypatch.setattr(
+        robust, "_profile",
+        lambda _image, bins, max_freq: np.random.default_rng(5).normal(size=bins)
+    )
+    rows = spectral.probe(
+        source, b"payload", [0.12], [0.75],
+        peak_counts=[4, 8], variants=("all38",),
+        first_peak_quotas=[0, 10, 50],
+    )
+    assert len(rows) == 6
+    assert {r["first_peak_quota"] for r in rows} == {0, 10, 50}
+    assert {r["max_peaks"] for r in rows} == {4, 8}
+    assert all(set(r) == set(spectral.columns()) for r in rows)
+    assert calls == [(80, 64)]
