@@ -31,6 +31,17 @@ def test_parameter_parsers_reject_unsafe_values():
             sweep.parse_repeats(value)
 
 
+def test_explicit_pairs_support_two_axis_search_without_duplicates():
+    assert sweep.parse_pairs("32:9,40:11,48:13,40:11") == [
+        ("pair", 32.0, 9),
+        ("pair", 40.0, 11),
+        ("pair", 48.0, 13),
+    ]
+    for value in ("", "32", "32:8", "nan:9", "32:33", "32:9:11"):
+        with pytest.raises(ValueError):
+            sweep.parse_pairs(value)
+
+
 def test_codec_parameters_restored_after_exception():
     original = robust.DELTA, robust.REPEAT
     with pytest.raises(RuntimeError):
