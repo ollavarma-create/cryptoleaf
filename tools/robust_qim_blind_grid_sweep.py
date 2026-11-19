@@ -91,6 +91,18 @@ def representative(
     )
 
 
+def _header_score(
+    received: Image.Image, size: tuple[int, int],
+    delta: float, repeat: int,
+) -> float:
+    """Treat invalid or uninformative candidates as last-ranked."""
+    try:
+        value = float(qim.score_size(received, size, delta, repeat)["header"])
+    except ValueError:
+        return float("-inf")
+    return value if math.isfinite(value) else float("-inf")
+
+
 def blind_rank(
     received: Image.Image,
     min_scale: float = 0.5,
@@ -113,7 +125,7 @@ def blind_rank(
     cache: dict[tuple[int, int], float] = {}
     for grid, sizes in grids.items():
         size = representative(sizes, received.size)
-        score = qim.score_size(received, size, delta, repeat)["header"]
+        score = _header_score(received, size, delta, repeat)
         cache[size] = score
         coarse.append((grid, score, size))
     coarse_seconds = time.perf_counter() - start
@@ -125,9 +137,9 @@ def blind_rank(
     for grid, _score, _rep in selected:
         for size in grids[grid]:
             if size not in cache:
-                cache[size] = qim.score_size(
+                cache[size] = _header_score(
                     received, size, delta, repeat
-                )["header"]
+                )
             refined.append((size, cache[size]))
     refined.sort(key=lambda entry: (-entry[1], entry[0]))
     refine_seconds = time.perf_counter() - start
