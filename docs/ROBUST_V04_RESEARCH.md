@@ -1530,6 +1530,72 @@ five covers alone; neither JPEG+resize,
 crop, platform recompression nor broad unseen
 cover diversity is covered by this matrix.
 
+### Two-stage cascade reproduces all 20 three-stage results exactly
+
+The user supplied `robust-v04-blind-cascade-two-stage-01.csv`.
+It was compared row-by-row against
+`robust-v04-blind-cascade-01.csv` using
+`source`, `resize_scale`, and `pilot_strength`
+as a unique composite key. Both have 20 rows and
+identical source hashes, encoded dimensions,
+received dimensions, pilot strengths, and DWT
+settings. The **two-stage 4:10,16:10 cascade
+reproduces all 20 actual blind statuses,
+safe-attempt counts, decoded dimensions, decoded
+dimension errors, LL2-shape matches and oracle
+outcomes exactly**.
+
+| Metric | Three stages (4:10,4:50,16:10) | Two stages (4:10,16:10) |
+| --- | ---: | ---: |
+| Blind packet recovery | **13/20** | **13/20** |
+| 75% resize recovery | 8/10 | 8/10 |
+| 50% resize recovery | 5/10 | 5/10 |
+| First-stage successes | 10 | 10 |
+| Extended-stage successes | 3 | 3 |
+| Failed searches | 7 | 7 |
+| Oracle-known-size successes | 20/20 | 20/20 |
+| Total measured seconds | 32.887 | 31.722 |
+
+The measured runtime difference is **1.165 s**
+(approximately 3.54%) across all 20 cases, but
+these are unreplicated timings on a local system;
+do **not** treat the percentage as a statistically
+established speedup. The removed 4:50 stage made
+zero new safe decoder calls in the previous matrix.
+
+**Decision:** research-only
+`tools/robust_pilot_cascade_probe.py` now
+defaults to **4:10,16:10**. The optional 4:50
+stage is retained for regression controls via
+`--stages 4:10,4:50,16:10`. The maximum
+nominal budget is now **320 generated candidate
+pixel sizes** (160 per stage), before deduplication
+and safe-size filtering. Observed failure cases
+required 184–270 safe decoding attempts.
+
+**Remaining research:** four screenshot failures,
+two Aarne 50% failures, one Anna Maria 50% pilot
+.12 failure. All seven oracle-known-size decodes
+succeed. Investigate whether Fourier pilot
+signal is masked by cover-content spectral
+structure, attenuated by adaptation, or damaged
+by the DWT embedding and resize, before changing
+pilot strength or production decoding.
+
+A useful next controlled ablation is to measure
+the *same cover* at fixed resize and payload
+with **no Fourier pilot, pilot only, DWT only,
+and pilot+DWT**, comparing the true-scale
+correlation score, its local-peak rank and the
+difference relative to DWT-only. This uses the
+original source as an **oracle diagnostic** only;
+a practical blind decoder cannot subtract a
+cover-only reference. A zero-pilot control is
+essential to distinguish a real pilot signal
+from a natural Fourier peak. If pilot contrast
+is weak or absent, broadening the search is
+unlikely to be an effective general fix.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
