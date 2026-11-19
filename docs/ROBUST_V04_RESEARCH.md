@@ -1277,6 +1277,68 @@ under any tested strategy, and Aarne at 50%
 still lacks a grid hit: those remain open
 synchronization-signal research problems.
 
+### Confirmed actual blind recovery with 16/10 and 8/10 (four successful searches)
+
+The user supplied two CSVs:
+`robust-v04-blind-quota-aarne-75-01.csv` (2 rows) and
+`robust-v04-blind-quota-anna-50-01.csv` (2 rows).
+**All four** have `status=OK`, `oracle=PASS`,
+and, crucially, **`blind_status=PASS`** with
+the research-only 0.45–1.02 Fourier search,
+matched DWT **DELTA=38 / REPEAT=13**, and 160
+maximum candidate sizes. All used first-peak quota 10.
+These are **three distinct received-image conditions**
+(Aarne .12/.18 and Anna Maria .18), because the
+Anna Maria case was searched with both 8 and 16 peaks.
+
+| Cover / received resize / pilot | Peaks | Blind attempts | Decoded dimensions | Actual encoded dimensions |
+| --- | ---: | ---: | --- | --- |
+| AarneArmeijassa / 75% / .12 | 16 | **25** | **273×389** | 273×391 |
+| AarneArmeijassa / 75% / .18 | 16 | **24** | **273×389** | 273×391 |
+| Anna Maria / 50% / .18 | 8 | **38** | **1280×867** | 1280×867 |
+| Anna Maria / 50% / .18 | 16 | **86** | **1280×867** | 1280×867 |
+
+The two Aarne successes are **new actual blind
+recoveries**: the previous four-peak detector failed
+on this cover at 75%. Both succeeded at a size two
+pixels shorter than the encoded height, preserving
+the exact **69×98 LL2 coefficient grid**. The true
+size was in the candidate list at unfiltered ranks
+89 (.12) and 88 (.18), but the decoder returned
+the packet earlier at 273×389. This confirms that
+identical LL2 geometry can support a non-exact-size
+decode, but does not guarantee it in every case.
+
+Anna Maria at 50% pilot .18 had its first matching
+LL2 grid at safe candidate **4** for both peak budgets.
+Yet actual recovery required **38** (8 peaks) or
+**86** (16 peaks) safe attempts, and both decoded at
+the **exact 1280×867** dimensions. This shows why
+LL2-grid hit rank is only a diagnostic: resampling
+and pixel-level QIM voting still matter. The exact
+size appeared at unfiltered ranks 64 and 112,
+respectively; unsafe candidates are skipped.
+
+The 8-peak search was substantially more efficient
+than 16 peaks for Anna Maria (38 vs 86 attempts)
+without changing the embedded image. Thus optimizing
+LL2 coverage alone is insufficient: compare actual
+PASS rates and attempts on a fixed matrix.
+
+**Open regression control:** Anna Maria 75%, pilot
+.12 passed with the old 4/50 strategy, but the
+16/10 candidate list had no matching LL2 grid
+in the preceding rank-only matrix. Run the
+four-search paired control from the preceding
+section before proposing a new default. The
+CryptoLeaf screenshot and Aarne 50% remain
+unsolved by the measured candidate lists.
+
+**Status:** new search is **research-only**; no
+production codec change or blind recovery guarantee
+has been established for unseen covers, JPEG+resize
+combinations, cropping or unknown transformations.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
