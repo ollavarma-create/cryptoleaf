@@ -204,6 +204,8 @@ def probe(
                     "received_width": received.width,
                     "received_height": received.height,
                     "status": "OK",
+                    "blind_attempts": None,
+                    "blind_decoded_size": None,
                     "oracle": decode_known_at_size(
                         received, marked.size, payload
                     ),
