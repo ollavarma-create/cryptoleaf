@@ -58,6 +58,16 @@ def test_extended_blind_reports_failure_without_oracle_fallback(monkeypatch):
     assert (status, attempts, size) == ("FAIL:not_recovered", 2, None)
 
 
+def test_decoded_size_offsets_and_haar_ll2_shape():
+    # Real-cover size pairs from the two successful blind CSVs.
+    assert sync.decoded_size_metrics("1280x868", (1280, 867)) == (0, 1, True)
+    assert sync.decoded_size_metrics("1200x677", (1198, 677)) == (2, 0, True)
+    # Crossing the next four-pixel LL2 boundary changes the permutation grid.
+    assert sync.decoded_size_metrics("1201x677", (1198, 677)) == (3, 0, False)
+    assert sync.decoded_size_metrics("1280x869", (1280, 867)) == (0, 2, False)
+    assert sync.decoded_size_metrics(None, (1280, 867)) == (None, None, None)
+
+
 def test_scale_and_pilot_parsers():
     assert sync.parse_scales("0.75,0.5,0.75") == [0.75, 0.5]
     assert sync.parse_strengths("0,0.12,0.18,0") == [0, 0.12, 0.18]
@@ -118,6 +128,8 @@ def test_probe_separates_oracle_and_size_rank(monkeypatch, tmp_path):
     assert all(row["blind_status"] == "NOT_RUN" for row in rows)
     assert all(row["extended_blind_status"] == "NOT_RUN" for row in rows)
     assert all(row["extended_blind_attempts"] is None for row in rows)
+    assert all(row["blind_same_ll2_shape"] is None for row in rows)
+    assert all(row["extended_blind_same_ll2_shape"] is None for row in rows)
     assert observed == [(38.0, 13), (38.0, 13)]
     assert (robust.DELTA, robust.REPEAT) == original
     assert set(rows[0]) == set(sync.columns())
