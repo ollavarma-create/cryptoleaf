@@ -38,6 +38,31 @@ Metrics include:
 
 Keep original and encoded images for side-by-side viewing at 100% zoom. The human assessment is the primary judgment of objectionable artifacts; these numbers are diagnostic evidence, not a substitute for it.
 
+## Controlled pilot / DWT ablation
+
+The first three manual comparisons on a 1198×677 UI screenshot found:
+
+| Pair | PSNR | SSIM-Y | Pixels with RGB channel difference >4 |
+| --- | ---: | ---: | ---: |
+| Original vs YCbCr roundtrip | 46.3015 dB | 0.999916 | 0% |
+| Original vs pilot-only | 42.7988 dB | 0.990689 | 2.1724% |
+| YCbCr control vs pilot-only | 45.2567 dB | 0.990764 | 0.226% |
+
+These are user-reported metrics from the manually generated images; the exact provenance of the pilot-only image must still be confirmed. SSIM on flat UI regions is particularly sensitive to weak structured perturbations. Pixel percentages and PSNR values are not additive across stages.
+
+To remove ambiguity about how each test image was created, run this reproducible experiment from the repository root:
+
+```bash
+python tools/robust_ablation.py \
+  /home/jari/Pictures/0-4-mosaic-in/appfootprint-main.png \
+  --out /home/jari/Pictures/0-4-mosaic-out/ablation-01 \
+  --csv results/robust-v04-ablation-01.csv
+```
+
+It generates one deterministic RS8 packet and saves YCbCr-only, pilot-only, DWT-only and full pilot+DWT images, plus amplified difference maps. It measures each stage against the same original and checks exact packet recovery from DWT-only/full PNG and JPEG (quality 85, 75, 60) using **known-size** decoding. This does **not** test blind size synchronization; blind decoding and resizing need their own follow-up tests.
+
+Each stage's color conversions can differ, so the test is a controlled *pipeline ablation*, not an exact physical separation of the pilot and DWT distortion. The script refuses to overwrite existing output images or reuse an existing CSV; use a fresh output folder and CSV name per run.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
