@@ -338,6 +338,65 @@ separately test **blind** original-size search on representative covers.
 Do not merge an experimental parameter change into production without
 a backwards-compatible signaling/format plan.
 
+### Fixed-pilot DELTA/REPEAT ablation: two residual 50%-resize covers
+
+A dedicated **research-only** tool,
+`tools/robust_dwt_parameter_sweep.py`, tests the two remaining failing
+covers (`appfootprint-main.png` and `Anna Maria Liikanen.jpg`) using
+the exact same deterministic 40-byte message and RS8 packet as the
+previous matrix. The Fourier pilot is fixed at **0.0** by default and
+all candidates use the same cover preprocessing and RGB/YCbCr roundtrip.
+
+The baseline is **DELTA=32, REPEAT=9**. Two independent sweeps vary only
+one factor at a time:
+
+- DELTA: 24, 28, 32, 36, 40, 48, 56, 64; REPEAT fixed at 9
+- REPEAT: 5, 7, 9, 11, 13, 15, 17; DELTA fixed at 32
+
+The baseline appears only once, so there are **14 parameter pairs per
+cover (28 encodes)**. Every case evaluates PNG, JPEG q60, 75% and 50%
+Lanczos resize, all with **oracle original size**; it records PSNR,
+SSIM, worst local luma distortion, raw QIM/majority-vote errors before
+and after 50% resizing, CLR1 magic/length errors, RS8 codeword-byte
+errors, DWT capacity and timing. The encoder and decoder use the **same**
+DELTA and REPEAT for each case; temporary global parameter changes are
+restored even on exceptions. No source images or production constants
+are changed. CSV is written incrementally and never overwritten.
+
+Run a short six-encode smoke test first:
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_dwt_parameter_sweep.py -q
+python tools/robust_dwt_parameter_sweep.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --deltas 32,40 \
+  --repeats 9,11 \
+  --csv results/robust-v04-dwt-smoke-01.csv
+```
+
+If that works, run the full fixed-pilot one-axis sweep:
+
+```bash
+python tools/robust_dwt_parameter_sweep.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --csv results/robust-v04-dwt-sweep-01.csv
+```
+
+Do not interpret a single 50%-resize PASS as a suitable new default.
+First check that the baseline reproduces the two earlier failures,
+that PNG/JPEG60/75% still pass, and that PSNR/SSIM/local artifacts are
+acceptable. If a promising pair is found, validate it across all 30
+covers and more image transformations. Only then investigate blind
+original-size discovery, initially with a representative subset.
+
+**Compatibility caveat:** changing DELTA or REPEAT changes the on-image
+QIM layout. The current CLR1 packet does not encode these parameters.
+The experiment is therefore NOT a backwards-compatible codec update;
+shipping a new setting requires a versioned signaling/bootstrap plan
+or a carefully bounded compatible decoder search. Do not merge parameter
+changes into production on the basis of this sweep alone.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
