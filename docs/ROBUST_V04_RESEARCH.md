@@ -1596,6 +1596,78 @@ from a natural Fourier peak. If pilot contrast
 is weak or absent, broadening the search is
 unlikely to be an effective general fix.
 
+### Controlled four-arm pilot visibility experiment (next run)
+
+The research-only script
+`tools/robust_pilot_signal_probe.py` compares
+the **same cover**, fixed payload, pilot strength
+and received resize in four arms:
+
+- `cover_only`: YCbCr-roundtripped cover, no
+  Fourier pilot, no DWT packet.
+- `dwt_only`: cover + DWT packet, **no pilot**.
+- `pilot_only`: cover + Fourier pilot, **no DWT**.
+- `pilot_dwt`: cover + Fourier pilot + DWT packet
+  (the actual robust embedding pipeline).
+
+All four arms use the same LANCZOS received size,
+same 0.45–1.02 Fourier correlation search and
+32-ring radial profile (0.38 cycles/pixel). For
+each arm, record correlation at the **known true
+resize factor**, score percentile, closest local
+peak, local peak rank and best peak. The true
+scale is used **only for diagnostic evaluation**;
+neither a real decoder nor a blind candidate
+selector can use it. In particular, the
+`cover_only` and `dwt_only` images cannot
+be assumed available to a blind receiver.
+
+Compute paired differences:
+`pilot_only - cover_only` (pilot score lift
+before DWT) and
+`pilot_dwt - dwt_only` (pilot score lift
+after DWT). Also compare the two DWT effects
+on correlation score. These are **differences
+of normalized correlation scores**, not linear
+estimates of pilot amplitude or statistical
+significance. A negative score lift does not
+prove the pilot vanished; a positive lift
+does not prove blind synchronization works.
+
+```bash
+git pull --ff-only
+python -m pytest \
+  tests/test_robust_pilot_cascade_probe.py \
+  tests/test_robust_pilot_signal_probe.py -q
+
+python tools/robust_pilot_signal_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --pilot-strengths 0.12,0.18 \
+  --scales 0.75,0.5 \
+  --csv results/robust-v04-pilot-signal-four-arm-01.csv
+```
+
+Expect **20 rows** (five covers × two strengths ×
+two resizes), each with **four matched spectral
+measurements**. The goal is to distinguish
+cover-content interference, DWT-related
+distortion and adaptive pilot attenuation,
+especially for CryptoLeaf screenshot, Aarne 50%
+and Anna Maria 50% pilot .12. Compare against
+P1000450 and AppFootprint successes as controls.
+
+If pilot-only is detectable but pilot+DWT is
+not, examine DWT interaction. If both are
+masked by cover-only peaks, consider
+cover-robust pilot redesign or a more
+discriminative detector. If pilot+DWT has a
+true-scale peak but its rank is too low,
+investigate a better candidate scheduling
+policy. **Do not modify the production
+codec on these diagnostics alone**: validate
+new blind recovery and visual quality on
+held-out covers first.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
