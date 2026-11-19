@@ -2752,6 +2752,77 @@ later be tested on untouched covers and
 unknown resize ratios. Production codec
 and Fourier search are unchanged.
 
+### Generic scale-prior bank: eight rank-only results
+
+User-supplied `robust-v04-qim-scale-bank-01.csv`
+contains **8 complete, rank-only** rows: four
+selected covers × nominal strengths .12/.18 ×
+50% LANCZOS resize. All are `status=OK`,
+`oracle=PASS`, `blind_budget=0`, with
+adaptive pilot, `DELTA=38`, `REPEAT=13`.
+The deterministic bank uses enlargement priors
+`1,1.25,1.333333333,1.5,1.75,2` and
+±2 pixels in each dimension. Candidate counts
+are 140–150; the bank includes the exact
+original pixel dimensions in all eight cases.
+
+| Cover | Strengths | Bank exact-size rank | CLR1-header exact-size rank | Header score at true size |
+| --- | --- | --- | --- | --- |
+| `kulutus-web-anal1.png` | .12/.18 | 129/129 | **1/1** | .902510/.893949 |
+| `kulutus-web-vika.png` | .12/.18 | 130/130 | **1/1** | .932390/.932672 |
+| `appfootprint-main.png` | .12/.18 | 129/129 | **1/1** | .706921/.710144 |
+| `P1000450.JPG` | .12/.18 | 126/126 | **1/1** | .827150/.827385 |
+
+The wrong-seed header score at the true size
+ranges from **−.040912 to +.040328**; wrong
+delta (1.5×) from **−.564778 to +.053029**.
+On unmarked covers, the **maximum** header
+score over the entire bank is **.100989–.141356**;
+the minimum marked true-size score is
+**.706921**. The unmarked control is the same
+cover reused at two nominal strengths, so these
+are **four distinct unmarked controls**, not
+eight independent ones. The first experiment
+therefore supports real CLR1-header discrimination
+but does **not** establish blind packet recovery
+or generalization to unseen images.
+
+Mean candidate construction + scoring time:
+**2.674 s per marked case**, or **21.394 s**
+across eight rows. Separately computing the
+unmarked control costs **2.611 s per row**;
+this is research-only overhead, not required
+by a future receiver.
+
+**Crucial limitation:** the 50% resize is
+exactly represented by the bank's 2×
+enlargement prior, and the ±2-pixel jitter
+covers odd original dimensions. This is an
+explicit, favorable prior, not a solution
+for arbitrary resize factors. The chosen
+covers were previously used to investigate
+failures. No held-out test has yet validated
+the scale-bank method.
+
+**Next predeclared blind comparison:** repeat
+the identical eight cases with
+`--blind --decode-budget 40`, keeping
+the default prior order. Compare raw-bank
+vs header-ranked decoder attempts, PASS/FAIL
+and total cost including score time. In a
+second, separate run reverse the scale-prior
+order to `2,1.75,1.5,1.333333333,1.25,1`.
+This retains the **same candidate set**
+but puts the favorable 2× prior first, giving
+a strong non-QIM baseline. A 40-call
+default-order baseline cannot reach the
+true size (bank ranks 126–130), so comparing
+only against that baseline would be misleading.
+Both comparisons are **development-set**
+results; an untouched set and non-prior
+resize factors are required before
+production consideration. No codec changes.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
