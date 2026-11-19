@@ -20,7 +20,7 @@ from PIL import Image
 import pywt
 
 from src import robust_image as robust
-from src.robust_packet import HEADER_BYTES, pack
+from src.robust_packet import HEADER_BYTES, MAX_CODEWORD, pack, unpack
 
 
 def bit_errors(image: Image.Image, packet: bytes) -> dict[str, int]:
@@ -57,6 +57,44 @@ def bit_errors(image: Image.Image, packet: bytes) -> dict[str, int]:
     }
 
 
+def probe_one_bit_length_repair(
+    image: Image.Image, original_size: tuple[int, int], expected: bytes
+) -> str:
+    """Diagnostic only: flip one decoded length bit, then verify RS8 and CRC32.
+
+    This does not change the production decoder or the CLR1 wire format.
+    The original size must be supplied by the caller (oracle), so a PASS
+    does not demonstrate blind scale synchronization.
+    """
+    if image.size != original_size:
+        image = image.resize(original_size, Image.Resampling.LANCZOS)
+    ll = pywt.wavedec2(
+        robust._ycc(image)[:, :, 0], "haar", level=2, mode="periodization"
+    )[0].ravel()
+    positions = np.random.default_rng(robust.SEED).permutation(ll.size)
+    header = robust._read_from_ll(ll, HEADER_BYTES, positions)
+    if header[:4] != b"CLR1":
+        return "NOT_APPLICABLE:magic_corrupt"
+    observed_length = int.from_bytes(header[4:6], "big")
+    for bit in range(16):
+        corrected_length = observed_length ^ (1 << bit)
+        count = (HEADER_BYTES + corrected_length) * 8 * robust.REPEAT
+        if not 12 <= corrected_length <= MAX_CODEWORD or count > ll.size:
+            continue
+        raw = robust._read_from_ll(
+            ll, HEADER_BYTES + corrected_length, positions
+        )
+        repaired = b"CLR1" + corrected_length.to_bytes(2, "big") + raw[HEADER_BYTES:]
+        try:
+            recovered = unpack(repaired)
+        except ValueError:
+            continue
+        if recovered == expected:
+            return f"PASS:len={corrected_length},bit={bit}"
+        return "FAIL:unexpected_valid_payload"
+    return "FAIL:no_valid_one_bit_repair"
+
+
 def inspect_file(path: Path, packet: bytes, scale: float) -> dict:
     with Image.open(path) as opened:
         original = opened.convert("RGB")
@@ -70,11 +108,13 @@ def inspect_file(path: Path, packet: bytes, scale: float) -> dict:
         oracle = "PASS" if decoded == packet_payload(packet) else "FAIL:payload_mismatch"
     except ValueError as exc:
         oracle = "FAIL:" + str(exc)
+    repair = probe_one_bit_length_repair(down, original.size, packet_payload(packet))
     return {
         "file": path.name,
         "original_size": f"{original.width}x{original.height}",
         "scaled_size": f"{down.width}x{down.height}",
         "oracle": oracle,
+        "one_bit_length_repair_probe": repair,
         **{"before_" + key: value for key, value in before.items()},
         **{"after_" + key: value for key, value in after.items()},
     }
@@ -108,6 +148,7 @@ def main() -> None:
     for row in rows:
         print(
             f"{row['file']} oracle={row['oracle']} "
+            f"length_repair={row['one_bit_length_repair_probe']} "
             f"QIM errors={row['after_repeated_qim_errors']} "
             f"majority bit errors={row['after_majority_bit_errors']} "
             f"header bit errors={row['after_header_bit_errors']} "
@@ -123,6 +164,7 @@ def main() -> None:
             writer.writerows(rows)
         print("CSV:", args.csv)
     print("RS8 can correct at most four erroneous codeword bytes, provided the header is intact.")
+    print("One-bit length repair is an oracle-size diagnostic, NOT a production decoder change.")
 
 
 if __name__ == "__main__":
