@@ -2289,7 +2289,7 @@ covers, it was evaluated on 25 new covers, 2 nominal pilot strengths
 (.12/.18) and two separate LANCZOS resizes (75%/50%). Paired
 source hashes and embedding settings matched between the old two-stage
 unmasked cascade and the frozen multi-mask cascade. The small
-\`Leimasin.jpg\` cover was capacity-ineligible for all four conditions,
+`Leimasin.jpg` cover was capacity-ineligible for all four conditions,
 leaving **96 eligible cases**. Known-size oracle decoding passed **96/96**.
 
 - Original two-stage blind recovery: **68/96 (70.8%)**.
@@ -2299,11 +2299,11 @@ leaving **96 eligible cases**. Known-size oracle decoding passed **96/96**.
 - 50% resize: **24/48 -> 35/48**.
 - Total safe decoder attempts: **8,974 -> 13,882 (+54.7%)**.
 - This is a **larger-search-budget comparison**, not equal-cost
-  evidence. The two scripts' reported \`seconds\` use different
+  evidence. The two scripts' reported `seconds` use different
   timing boundaries, so they must not be compared directly.
 
 The two white-background, axis-aligned UI screenshots
-\`kulutus-web-anal1.png\` and \`kulutus-web-vika.png\`
+`kulutus-web-anal1.png` and `kulutus-web-vika.png`
 remain difficult at 50% resizing, despite oracle PASS.
 They are now **exploratory diagnostic controls**, not an
 untouched validation set. Their failure is consistent with,
@@ -2313,7 +2313,7 @@ evaluated as though they were still independent.
 
 ### Deterministic synthetic UI orientation experiment
 
-The research-only \`tools/robust_ui_synthetic_covers.py\` creates
+The research-only `tools/robust_ui_synthetic_covers.py` creates
 seven same-size, seeded RGB covers (default 960x720):
 
 1. Near-white flat background, RGB(248,248,248)
@@ -2326,32 +2326,32 @@ seven same-size, seeded RGB covers (default 960x720):
 
 The added texture-only case is necessary to distinguish a
 texture effect from the interaction of texture and grid/bars.
-Optional \`--control\` files are copied **byte-for-byte** into
+Optional `--control` files are copied **byte-for-byte** into
 the output directory, with SHA256 hashes and basic white/grey
-fractions in \`synthetic-manifest.csv\`. Never commit real user
+fractions in `synthetic-manifest.csv`. Never commit real user
 images to the repository. The output directory must be empty.
 No embedding or production-code change occurs in the generator.
 
 Suggested independent positive controls:
-\`P1000450.JPG\` and \`appfootprint-main.png\`.
+`P1000450.JPG` and `appfootprint-main.png`.
 Suggested difficult controls:
-\`kulutus-web-anal1.png\` and \`kulutus-web-vika.png\`.
+`kulutus-web-anal1.png` and `kulutus-web-vika.png`.
 Only the two former were known to be comparatively easy in
 previous pilot tests; none of the controls is an independent
 held-out image after being selected for this experiment.
 
 Generate covers, then run the existing
-\`robust_pilot_angular_probe.py\` with 0/5/20-degree
+`robust_pilot_angular_probe.py` with 0/5/20-degree
 exclusions and 0.38/0.48 maximum frequency, at strengths
 .12/.18 and resize factors .75/.5. The angular probe
 already embeds **pilot+DWT** and **DWT-only** negative
 controls, measures true-scale scores and local peak rank,
 and reports the first matching LL2 candidate-grid rank.
-Use \`--blind\` only for bounded follow-up runs; a grid
+Use `--blind` only for bounded follow-up runs; a grid
 rank is **not** successful packet recovery. Separately,
-run the **frozen** \`robust_pilot_multimask_probe.py\`
+run the **frozen** `robust_pilot_multimask_probe.py`
 for actual blind recovery with the exact fixed
-\`0.38:0,0.38:5,0.48:20\` sequence.
+`0.38:0,0.38:5,0.48:20` sequence.
 
 The causal question is whether adding axis-aligned
 structures to a controlled cover reduces true-scale
