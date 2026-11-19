@@ -6,9 +6,10 @@ inside the blind search budget after 75% and 50% resizing. The true dimensions
 are used only for the oracle control and diagnostics, never as a candidate hint.
 
 Both the current production search (.70..1.02) and an extended experimental
-search (.45..1.02) are ranked WITHOUT decoding. Optional --blind executes
-the unchanged production blind decoder (slow). The extended candidate list
-is NOT used for decoding and does NOT modify the production decoder.
+search (.45..1.02) are ranked WITHOUT decoding by default. Optional --blind
+executes the unchanged production blind decoder (slow); optional
+--extended-blind attempts decoding against the extended Fourier candidates
+using the unchanged matched DWT decoder. Neither option modifies production.
 """
 from __future__ import annotations
 
