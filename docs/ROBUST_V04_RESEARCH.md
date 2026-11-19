@@ -3631,6 +3631,52 @@ Do not change the production codec
 or tune thresholds on these
 development cases.
 
+### JPEG visual-fidelity gate: implementation pending local execution
+
+Research-only `tools/robust_qim_jpeg_fidelity_probe.py`
+and `tests/test_robust_qim_jpeg_fidelity_probe.py`
+were added after the 36/36 JPEG blind-recovery
+result. The tests and probe **have not been run**
+in this environment. This is a quality gate,
+not a change to the receiver or codec.
+
+For each source, it measures the **same
+unmarked vs marked image** at native codec
+reference size and after **identical**
+LANCZOS resize + JPEG 4:2:0 compression
+at quality 85 and 70. Reuse the six
+JPEG-development covers and scales
+.55/.68/.83, nominal adaptive pilot
+.12, QIM DELTA38/REPEAT13, same payload.
+Metrics are PSNR, mean luminance SSIM,
+1st-percentile local luminance SSIM,
+RGB MAE, fraction of pixels changed by
+>4 and >8, 99th percentile RGB change,
+new saturated pixel fraction, and worst
+16×16 luminance tile with coordinates.
+Because both images receive the same
+transform, this comparison isolates
+*incremental embedding distortion*;
+it does not measure total quality loss
+from the original JPEG/resizing chain.
+
+Optional `--sample-dir` saves local
+native side-by-side PNGs, received
+side-by-side PNGs for one selected
+scale/quality, and exaggerated
+native RGB difference images. Inspect
+the **unmodified native side-by-side
+images at 100% zoom**, especially
+small UI screenshots with flat fills,
+fine text, and edges. Do not interpret
+an amplified difference image as
+the actual visible artifact. No
+absolute PSNR/SSIM pass threshold
+has been predeclared; report raw
+metrics and a human visual inspection
+before deciding whether to optimize
+the pilot or integrate production.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
