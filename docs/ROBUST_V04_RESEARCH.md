@@ -63,6 +63,31 @@ It generates one deterministic RS8 packet and saves YCbCr-only, pilot-only, DWT-
 
 Each stage's color conversions can differ, so the test is a controlled *pipeline ablation*, not an exact physical separation of the pilot and DWT distortion. The script refuses to overwrite existing output images or reuse an existing CSV; use a fresh output folder and CSV name per run.
 
+## Fourier pilot strength sweep
+
+The second user-run ablation showed:
+
+| Stage | PSNR | SSIM-Y | Pixels with RGB channel difference >4 |
+| --- | ---: | ---: | ---: |
+| DWT only | 43.0921 dB | 0.991425 | 3.5894% |
+| YCbCr roundtrip then DWT | 40.6364 dB | 0.991233 | 5.506% |
+| Pilot then DWT | 39.2891 dB | 0.982580 | 13.3695% |
+
+A direct comparison of YCbCr-then-DWT with pilot-then-DWT produced PSNR 43.3608 dB and SSIM-Y 0.986399. These numbers support investigating pilot strength before changing DELTA or REPEAT. The user-reported known-size PNG and JPEG 85/75/60 tests passed for all three DWT-bearing stages; this is **not** proof of blind resized-image recovery.
+
+Run a controlled strength sweep on a screenshot:
+
+```bash
+python tools/robust_pilot_sweep.py \
+  /home/jari/Pictures/0-4-mosaic-in/appfootprint-main.png \
+  --out /home/jari/Pictures/0-4-mosaic-out/pilot-sweep-01 \
+  --csv results/robust-v04-pilot-sweep-01.csv
+```
+
+The default nominal pilot strengths are 0, 0.04, 0.08, 0.12 and 0.18. The codec's **image-level adaptive factor** still applies, so CSV reports nominal and effective strength. All candidates use the same deterministic packet, DWT parameters and number of color roundtrips. The zero-strength control deliberately includes the extra color roundtrip, avoiding the original `_pilot_embed(..., strength=0)` early-return confound. PNG and JPEG recovery checks use the known original size.
+
+To additionally test blind synchronization after 75% resizing, use `--blind-scale 0.75` with a **new output folder and CSV filename**. This can be slow; do not interpret a known-size JPEG PASS as pilot success.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
