@@ -102,6 +102,8 @@ def main() -> None:
     existing = [str(path) for path in output_paths.values() if path.exists()]
     if existing:
         parser.error("Refusing to overwrite existing files: " + ", ".join(existing))
+    if args.csv and args.csv.exists() and args.csv.stat().st_size > 0:
+        parser.error("CSV must be a new file to avoid mixing schemas: " + str(args.csv))
 
     results = stages(reference, payload)
     rows = []
@@ -143,8 +145,6 @@ def main() -> None:
     print(f"\nSaved images and 12x difference maps to: {args.out}")
 
     if args.csv:
-        if args.csv.exists() and args.csv.stat().st_size > 0:
-            parser.error("CSV must be a new file to avoid mixing schemas: " + str(args.csv))
         args.csv.parent.mkdir(parents=True, exist_ok=True)
         with args.csv.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
