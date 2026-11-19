@@ -47,8 +47,15 @@ def priority_candidates_from_peaks(
     received_size: tuple[int, int],
     peaks: list[tuple[float, float]],
     max_candidates: int = 160,
+    first_peak_quota: int = 50,
 ) -> list[tuple[int, int]]:
-    """Same Priority50 ordering as production, for alternate peak ranges."""
+    """Research-only Priority50 ordering with an optional first-peak quota.
+
+    Quota=50 exactly preserves the previous research and production order.
+    Smaller quotas allocate more of the fixed budget across other peaks.
+    """
+    if max_candidates < 1 or not 0 <= first_peak_quota <= max_candidates:
+        raise ValueError("Invalid candidate budget or first-peak quota")
     streams = [
         iter(robust._candidate_sizes(received_size, scale, limit=max_candidates))
         for scale, _score in peaks
@@ -64,7 +71,7 @@ def priority_candidates_from_peaks(
         return None
 
     if streams:
-        for _ in range(min(50, max_candidates)):
+        for _ in range(first_peak_quota):
             size = take(streams[0])
             if size is None:
                 break
