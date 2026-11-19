@@ -97,6 +97,8 @@ def probe(
     delta: float = 38.0,
     repeat: int = 13,
 ) -> list[dict]:
+    if not strengths or any(strength <= 0 for strength in strengths):
+        raise ValueError("Pilot strengths must be strictly positive")
     with Image.open(source) as opened:
         reference = reference_image(opened)
     packet = pack(payload)
