@@ -1436,6 +1436,100 @@ may be necessary. No production change should
 follow until measured blind recovery, latency and
 image quality justify it.
 
+### Actual staged blind search: 13/20 recovered, second stage redundant on these covers
+
+The user supplied `robust-v04-blind-cascade-01.csv`:
+**20 rows**, five covers × two nonzero pilot strengths
+(.12/.18) × two LANCZOS resizes (75%/50%), with
+DWT **DELTA=38, REPEAT=13** and fixed
+`4:10,4:50,16:10` research-only cascade.
+Every `status=OK` and every oracle-known-size
+decode **PASS**.
+
+**Actual blind recovery: 13/20 (65%)**, including
+**8/10 at 75%** and **5/10 at 50%**. This
+confirms the prior 13/20 *union of LL2-grid hits*
+as real packet recovery on this particular
+five-cover, two-strength, two-resize test matrix.
+
+| Successful stage | Recovered cases | Safe decoder attempts |
+| --- | ---: | --- |
+| **4/10** | **10** | median **2**, mean **23.9** (1–106) |
+| **4/50** | **0 additional** | **0 additional** across all 20 rows |
+| **16/10** | **3 additional** | cumulative **129**, **157**, **175** |
+| Unrecovered | **7** | **184–270** safe attempts |
+
+The 16/10 stage rescues **Aarne 75%** pilots
+.12/.18 (decoded **273×389**, encoded **273×391**)
+and **Anna Maria 50%** pilot .18 (decoded exact
+**1280×867**). These three are the only additional
+blind recoveries over 4/10. Across all 13 successes,
+the median cumulative number of safe decoder calls
+is **7** (mean **53.85**), because three rescued
+cases are expensive. Total measured time across
+the 20 rows is **32.887 seconds** on the user's
+machine; this is an exploratory local measurement,
+not a benchmark across systems.
+
+**Critical redundancy finding:** the 4/50 stage
+made **zero new safe decoder calls** in every row.
+Its generated candidates were either already seen
+at 4/10 or unsafe. For Anna Maria 50% pilot .18,
+4/50 generated 28 additional pixel dimensions but
+all were unsafe; otherwise it generated no new
+dimensions. It therefore did not improve
+recoverability in this matrix. This does not prove
+4/50 is globally redundant on unseen covers.
+
+**Seven unrecovered cases** (all oracle PASS):
+
+- **CryptoLeaf screenshot** at both resize factors
+  and both pilot strengths: **4 failures**.
+- **Aarne** at 50% with both strengths:
+  **2 failures**.
+- **Anna Maria** at 50% with pilot .12:
+  **1 failure**.
+
+The screenshot is the most persistent failure;
+the 16-peak search does not produce a correct
+LL2 geometry in the preceding rank-only sweep.
+Do not conflate its failure with DWT data loss:
+all four oracle-known-size tests pass.
+
+**Next minimal simplification experiment:** run
+the same 20 images with `--stages 4:10,16:10`,
+holding the 160-candidate-per-stage budget and
+all other variables fixed. Compare
+`blind_status`, `blind_decoded_size`,
+`blind_attempts` and `successful_stage`
+row-by-row against the three-stage CSV. Expect
+the same recoveries and safe-attempt counts in
+this dataset, since the removed stage made no
+safe decoder calls. `stages_run`,
+`unique_pixel_candidates_generated` and
+`new_candidates_by_stage` will differ by design.
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_pilot_cascade_probe.py -q
+python tools/robust_pilot_cascade_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --pilot-strengths 0.12,0.18 \
+  --scales 0.75,0.5 \
+  --stages 4:10,16:10 \
+  --csv results/robust-v04-blind-cascade-two-stage-01.csv
+```
+
+If the two-stage version matches, make it the
+research default, retain 4/50 as an optional
+control, and begin investigating a more
+discriminative Fourier pilot/synchronization
+estimator for the seven unresolved cases. No
+production change is justified by these
+five covers alone; neither JPEG+resize,
+crop, platform recompression nor broad unseen
+cover diversity is covered by this matrix.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
