@@ -15,7 +15,9 @@ Optionally compare correlation peak counts and the first-peak candidate
 quota; pilot=0 is a negative control.
 The known encoded dimensions are used ONLY for diagnostic labels and the
 separate oracle check, NEVER to generate or reorder blind candidates.
-This tool ranks candidates; it does not run expensive blind packet decoding.
+By default this tool ranks candidates only. --blind opt-in runs actual
+packet recovery on each configured candidate list; use narrow CLI filters
+to keep this bounded.
 """
 from __future__ import annotations
 
@@ -39,6 +41,7 @@ from tools.robust_batch_matrix import image_paths
 from tools.robust_blind_sync_probe import (
     DEFAULT_NAMES, parse_scales, parse_strengths,
     priority_candidates_from_peaks, rank_and_distance,
+    decode_from_candidates, decoded_size_metrics,
 )
 from tools.robust_dwt_parameter_sweep import codec_parameters
 from tools.robust_pilot_sweep import (
@@ -197,7 +200,9 @@ def columns() -> list[str]:
         "true_scale_local_peak_rank", "nearest_local_peak_distance",
         "candidate_count", "exact_size_rank", "same_ll2_safe_rank",
         "safe_candidates_examined_for_grid", "nearest_size_distance_px",
-        "seconds",
+        "blind_status", "blind_attempts", "blind_decoded_size",
+        "blind_width_error_px", "blind_height_error_px",
+        "blind_same_ll2_shape", "seconds",
     ]
 
 
@@ -208,6 +213,7 @@ def probe(
     peak_counts: list[int] | None = None,
     variants: tuple[str, ...] | None = None,
     first_peak_quotas: list[int] | None = None,
+    run_blind: bool = False,
 ) -> list[dict]:
     with Image.open(source) as opened:
         reference = reference_image(opened)
@@ -282,6 +288,19 @@ def probe(
                             grid_rank, safe_examined = first_safe_grid_rank(
                                 candidates, marked.size
                             )
+                            if run_blind:
+                                blind_status, blind_attempts, decoded_size = (
+                                    decode_from_candidates(
+                                        received, candidates, payload
+                                    )
+                                )
+                            else:
+                                blind_status, blind_attempts, decoded_size = (
+                                    "NOT_RUN", None, None
+                                )
+                            width_error, height_error, same_grid = (
+                                decoded_size_metrics(decoded_size, marked.size)
+                            )
                             rows.append({
                                 **base,
                                 "received_width": received.width,
@@ -320,6 +339,12 @@ def probe(
                                 "same_ll2_safe_rank": grid_rank,
                                 "safe_candidates_examined_for_grid": safe_examined,
                                 "nearest_size_distance_px": nearest,
+                                "blind_status": blind_status,
+                                "blind_attempts": blind_attempts,
+                                "blind_decoded_size": decoded_size,
+                                "blind_width_error_px": width_error,
+                                "blind_height_error_px": height_error,
+                                "blind_same_ll2_shape": same_grid,
                                 "seconds": round(
                                     time.perf_counter() - started, 3
                                 ),
@@ -335,6 +360,10 @@ def main() -> None:
     parser.add_argument("--pilot-strengths", default="0.12,0.18")
     parser.add_argument("--scales", default="0.75,0.5")
     parser.add_argument("--max-candidates", type=int, default=160)
+    parser.add_argument(
+        "--blind", action="store_true",
+        help="Actually decode each candidate list (slow); use narrow filters",
+    )
     parser.add_argument(
         "--peak-counts", default="4",
         help="Comma-separated peak budgets, e.g. 4,8,12; default 4",
@@ -398,6 +427,7 @@ def main() -> None:
                     candidate_limit=args.max_candidates,
                     peak_counts=peak_counts, variants=variants,
                     first_peak_quotas=first_peak_quotas,
+                    run_blind=args.blind,
                 )
             except ValueError as exc:
                 print(
@@ -415,6 +445,8 @@ def main() -> None:
                     f"peaks={row['max_peaks']} "
                     f"quota={row['first_peak_quota']} "
                     f"oracle={row['oracle']} "
+                    f"blind={row['blind_status']} "
+                    f"attempts={row['blind_attempts']} "
                     f"grid_rank={row['same_ll2_safe_rank']} "
                     f"best_scale={row['best_peak_scale']}",
                     flush=True,
@@ -422,8 +454,9 @@ def main() -> None:
             handle.flush()
     print("CSV:", args.csv)
     print(
-        "The same-LL2-grid rank is only a necessary-geometry diagnostic, "
-        "NOT a successful blind decode. No production code was changed."
+        "A same-LL2-grid rank is only a geometry diagnostic. "
+        "Actual blind packet recovery is shown separately as blind_status "
+        "when --blind is enabled. No production code was changed."
     )
 
 
