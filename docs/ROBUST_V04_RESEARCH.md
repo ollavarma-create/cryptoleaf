@@ -543,6 +543,91 @@ recoverability from blind synchronization, and solve decoder
 parameter discovery. Changing DELTA/REPEAT is **not compatible**
 with the current CLR1 format unless signaled or searched safely.
 
+### Whole-corpus DWT 38/13 validation and blind-sync entry point
+
+The user supplied `robust-v04-dwt-fullcover-01.csv`:
+**90/90 successful encodes**, three matched parameter pairs × 30
+covers, fixed pilot 0.0. The four independent known-size recovery
+checks produced:
+
+| DELTA/REPEAT | PNG | JPEG q60 | 75% resize | 50% resize | Total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 32/9 | 30/30 | 30/30 | 30/30 | 28/30 | 118/120 |
+| **38/13** | **30/30** | **30/30** | **30/30** | **30/30** | **120/120** |
+| 64/9 | 30/30 | 30/30 | 30/30 | 30/30 | 120/120 |
+
+Across all 30 covers, mean PSNR (dB) is **39.178 (32/9)**,
+**38.160 (38/13)** and **36.871 (64/9)**. Mean luma SSIM is
+**0.988**, **0.978** and **0.965**, respectively. The 38/13
+candidate has higher PSNR **and** SSIM than 64/9 on *every* cover
+in this corpus, not merely on average. These numbers do not prove
+visual invisibility, robustness to combined transformations or
+steganalytic resistance.
+
+The capacity and quality worst case for 38/13 is
+`AarneArmeijassa.jpg`, encoded at **273×391**: it uses **89.20%**
+of LL2 coefficients for this fixed 58-byte packet; PSNR **32.7727 dB**,
+SSIM **0.866180**. Longer messages may not fit this cover. The
+DWT 38/13 parameter pair is a *candidate*, not a production default:
+it still lacks a backward-compatible signaling scheme.
+
+**Important blind-search limitation:** the production Fourier peak
+search currently uses `_peaks(low=.70, high=1.02)`, so a genuine
+**0.50×** downscale lies outside its supported pilot-scale search
+window. The oracle success at 50% does NOT imply blind success.
+The 75% case is within that window, but candidate ranking may
+still fail to include the exact encoded dimensions. Additionally,
+the pilot's highest ring at 0.195 cycles/pixel maps to about 0.39
+cycles/pixel after 50% scaling, slightly beyond the current radial
+profile's 0.38 upper bound; simply widening the scale search may
+not be enough.
+
+A new **research-only** tool
+`tools/robust_blind_sync_probe.py` probes five representative covers:
+the two hard covers, the small-capacity worst case, the
+CryptoLeaf UI screenshot and a camera photo. It holds **DELTA=38,
+REPEAT=13** fixed, tests pilot strengths **0/0.12/0.18** and resize
+factors **0.75/0.50**. It records (a) oracle recovery, (b) the
+true original size's rank in the **unchanged** Priority50 candidate
+search, and (c) its rank in an *experimental widened*
+`_peaks(low=.45, high=1.02)` search. It also records candidate
+counts, best peak scores, nearest size distance and PSNR/SSIM.
+The widened search **only ranks** candidates; it never feeds them
+to the production decoder. Thus no algorithm change is smuggled
+into a result.
+
+First run the fast rank-only diagnostic (30 rows; **no blind
+decoding**):
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_blind_sync_probe.py -q
+python tools/robust_blind_sync_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --csv results/robust-v04-blind-sync-rank-01.csv
+```
+
+After reviewing whether the true size is in the 160-candidate budget
+and whether the pilot causes any oracle regression, run a **small**
+actual blind decode with `--blind`, for example on one cover and
+one pilot strength at 75%:
+
+```bash
+python tools/robust_blind_sync_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name appfootprint-main.png \
+  --pilot-strengths 0.12 \
+  --scales 0.75 \
+  --blind \
+  --csv results/robust-v04-blind-sync-actual-01.csv
+```
+
+This still uses *known DWT parameters* for the decoder; it is
+blind only with respect to the original image dimensions. No
+production parameters or on-image format have been changed.
+Do not claim 50% blind support until it is actually demonstrated
+with a validated widened-search decoder and independent controls.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
