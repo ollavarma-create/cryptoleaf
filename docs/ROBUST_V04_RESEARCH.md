@@ -2907,6 +2907,59 @@ Avoid promoting the QIM method to production
 until both search recall and end-to-end cost
 are validated on an independent dataset.
 
+### Baseline-only exhaustive scale bank: 8/8 payload recovery
+
+User-supplied `robust-v04-bank-exhaustive-01.csv`:
+8 complete rows, four selected covers × pilot strengths .12/.18,
+50% LANCZOS resize, `DELTA=38`, `REPEAT=13`, adaptive pilot,
+default six scale priors and ±2-pixel jitter. `--baseline-only --blind
+--decode-budget 200` **does not calculate any QIM header scores**.
+All eight oracle checks and all eight actual blind payload recoveries
+PASS. Each decoded pixel size equals the encoded original size.
+The first successful decode occurs exactly at the predeclared
+bank's original-size rank, **126–130** (mean **128.5** attempts).
+
+| Cover | Strengths | Exact-size rank / attempts | Decode seconds |
+| --- | --- | --- | --- |
+| `kulutus-web-anal1.png` | .12/.18 | 129/129 | 1.524/1.752 |
+| `kulutus-web-vika.png` | .12/.18 | 130/130 | 2.495/2.519 |
+| `appfootprint-main.png` | .12/.18 | 129/129 | 1.691/1.652 |
+| `P1000450.JPG` | .12/.18 | 126/126 | 2.495/2.566 |
+
+Total baseline-only decoder time: **16.694 s** over eight rows
+(mean **2.08675 s/case**). Bank generation totals **.001104 s**,
+so total generation + decode is **16.695104 s** (mean **2.086888 s**).
+The previous default-order QIM header run required
+**20.935 s** scoring + **.295 s** decoding =
+**21.230 s** (mean **2.65375 s/case**). The separate 2×-first
+direct decoder baseline needed **.908 s** total
+(mean **.1135 s/case**), succeeding after 1–5 attempts.
+
+Thus in these selected, **exactly 50%-resized** cases,
+exhaustive unranked decoding is about **21% faster**
+than the current full QIM-scored receiver
+(`1 - 16.695104/21.230`), or equivalently QIM is
+about **27% slower** (`21.230/16.695104 - 1`).
+The 2×-first baseline is much faster still because the
+scale prior is favorable. Runs were sequential, not
+randomized/CPU-controlled, so timing ratios are indicative.
+The QIM header remains a highly discriminating *signal*,
+but scoring all 140–150 candidates is not currently
+the best end-to-end strategy on this workload.
+
+**Research direction:** test candidate recall and payload
+recovery on **unknown, off-prior resize factors** using
+untouched covers. Before implementing a coarse-to-fine
+QIM scale search, characterize whether the soft CLR1
+score is smooth near the correct dimensions or is a
+narrow/discontinuous peak caused by the seeded LL2
+permutation and wavelet grid. If it is discontinuous,
+ordinary hill-climbing over image size is not justified;
+investigate Fourier-assisted candidate generation,
+QIM early-stop checks, or another scale-invariant
+synchronization mechanism instead. Do not change
+production defaults based on these selected-cover results.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
