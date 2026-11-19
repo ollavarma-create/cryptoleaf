@@ -1148,6 +1148,135 @@ on the strongest raw Fourier peaks. If a setting
 improves grid coverage, validate its **actual blind
 payload recovery** before any production change.
 
+### First-peak quota matrix: 480-row result, new Aarne candidates
+
+The user supplied `robust-v04-pilot-quota-01.csv`.
+**480 rows**, all `oracle=PASS`, all `status=OK`:
+five covers × pilot strengths **0, .12, .18** ×
+resizes **75%, 50%** × **4,8,16,24** peak counts ×
+first-peak quotas **0,10,25,50**. The same 30
+received-image conditions are repeated across 16
+search strategies. There are **20 distinct nonzero
+pilot cases**. The reported outcomes below are
+candidate geometry hits, **not blind decodes**.
+
+| Peaks / first quota | 75% LL2 hit | 50% LL2 hit | Total of 20 |
+| --- | ---: | ---: | ---: |
+| 4 / 50 (baseline) | 6/10 | 4/10 | **10/20** |
+| 8 / 10 | 6/10 | 5/10 | **11/20** |
+| **16 / 10** | **7/10** | **5/10** | **12/20** |
+| 16 / 25 | 7/10 | 3/10 | 10/20 |
+| 16 / 50 | 7/10 | 3/10 | 10/20 |
+| 24 / 10 | 5/10 | 3/10 | 8/20 |
+
+The **16 peaks / first-peak quota 10** strategy gains
+three LL2 grid hits relative to baseline, but loses
+one, yielding a net gain of two. Newly recovered
+candidate geometries:
+
+- **AarneArmeijassa.jpg, 75%**, pilot .12:
+  exact encoded size in candidate list; first matching
+  safe LL2 candidate at **25**. The true-scale local
+  correlation peak ranks **15**.
+- **AarneArmeijassa.jpg, 75%**, pilot .18:
+  exact encoded size in candidate list; first matching
+  safe LL2 candidate at **24**. The local peak ranks **14**.
+- **Anna Maria Liikanen.jpg, 50%**, pilot .18:
+  exact encoded size; first matching LL2 at **4**;
+  local peak ranks **6**.
+
+The regression is **Anna Maria, 75%, pilot .12**:
+baseline LL2 at safe candidate 72, but no matching
+grid at 16/10. The 16/10 strategy also pushes
+AppFootprint 50% LL2 matches to **158/160** (.12)
+and **156/160** (.18), near the candidate budget.
+For P1000450 75%, a matching grid moves from
+safe attempt **2** to **74**. Thus 16/10 improves
+*coverage*, not typical *latency*. Mean safe rank
+among successful hits is 45.08 vs baseline 25.90.
+A new adaptive/combined strategy would be needed
+to preserve easy first-peak successes.
+
+Average distinct safe LL2 grids per nonzero-pilot
+case increase from **21.55** (4/50) to **36.55**
+(16/10), but many candidate pixel sizes map to
+the same LL2 grid. Deduplicating grids outright
+would be unsafe because slightly different resampling
+dimensions within one grid may change QIM decoding.
+Any grid-aware scheduling should retain multiple
+nearby pixel-size hypotheses and verify payloads.
+
+**Zero-pilot control:** at 16/10, one of ten
+no-Fourier-pilot conditions has an LL2 grid hit
+(P1000450 at 50%, safe rank 21). A zero-pilot
+grid hit is not a CRC false positive: the DWT
+payload was still embedded, so a fortuitously
+correct size *might* genuinely decode. It
+demonstrates that Fourier candidate geometry
+alone does not prove the pilot was detected.
+
+**Next decisive step: actual blind validation of
+the new candidate lists.** The spectral research
+tool now has an explicit `--blind` switch,
+using the existing matched `decode_from_candidates`
+helper. It records blind PASS/FAIL, attempts,
+decoded dimensions and LL2 agreement. Default
+(no `--blind`) remains rank-only. To avoid
+hundreds of expensive decodes, run only these
+targeted cases:
+
+```bash
+git pull --ff-only
+python -m pytest \
+  tests/test_robust_blind_sync_probe.py \
+  tests/test_robust_pilot_spectral_ablation.py -q
+
+# Aarne: first actual test of new candidate coverage, two strengths
+python tools/robust_pilot_spectral_ablation.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name AarneArmeijassa.jpg \
+  --pilot-strengths 0.12,0.18 --scales 0.75 \
+  --variants all38 --peak-counts 16 \
+  --first-peak-quotas 10 --blind \
+  --csv results/robust-v04-blind-quota-aarne-75-01.csv
+
+# Anna Maria: newly found candidate at 50%, pilot .18
+python tools/robust_pilot_spectral_ablation.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name "Anna Maria Liikanen.jpg" \
+  --pilot-strengths 0.18 --scales 0.5 \
+  --variants all38 --peak-counts 8,16 \
+  --first-peak-quotas 10 --blind \
+  --csv results/robust-v04-blind-quota-anna-50-01.csv
+
+# Regression control: baseline 4/50 should pass at 75%,
+# while 16/10 loses the LL2 grid in this same case.
+python tools/robust_pilot_spectral_ablation.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name "Anna Maria Liikanen.jpg" \
+  --pilot-strengths 0.12 --scales 0.75 \
+  --variants all38 --peak-counts 4,16 \
+  --first-peak-quotas 10,50 --blind \
+  --csv results/robust-v04-blind-quota-anna-75-01.csv
+```
+
+The first two tests each contain **two actual blind
+searches**; the third contains **four** and exposes
+the regression. The original dimensions are used
+only in oracle and diagnostic fields; the actual
+blind search sees only the received pixels and
+Fourier-ranked candidates. None of these runs
+changes production behavior.
+
+A candidate with the exact encoded dimensions
+and `oracle=PASS` is a strong predictor of a
+blind PASS, but it should be confirmed end-to-end
+before claiming improved actual recoverability.
+The CryptoLeaf screenshot still has no grid hit
+under any tested strategy, and Aarne at 50%
+still lacks a grid hit: those remain open
+synchronization-signal research problems.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
