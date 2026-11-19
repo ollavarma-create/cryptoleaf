@@ -3677,6 +3677,110 @@ metrics and a human visual inspection
 before deciding whether to optimize
 the pilot or integrate production.
 
+### Visual artifact variability: JPEG fidelity CSV and predeclared ablation
+
+User-supplied `robust-v04-qim-jpeg-fidelity-01.csv`:
+**36** source/resize/JPEG-quality rows from **six**
+distinct covers, each measured at .55/.68/.83
+and JPEG85/JPEG70. The native-size metrics
+are **repeated six times per source**, not
+36 independent native measurements.
+The user visually reports that structured
+artifacts are obvious in some images but
+not others, with no clear common denominator.
+The CSV does **not** record which source
+the user judged visible. Do not assign
+subjective visibility labels from PSNR
+or SSIM alone.
+
+At native codec size across six sources:
+PSNR **36.9527–38.9015 dB**, mean
+luminance SSIM **.968722–.991911**,
+and worst 1% local luminance SSIM
+**.779638–.908420**. Pixel fraction
+with any RGB channel changed by >4 is
+**16.65–37.63%**. The cover with the
+**lowest effective pilot strength .036**
+has local SSIM p01 **.779638**; another
+cover at effective strength **.119439**
+has p01 **.908420**. Thus the global
+adaptive pilot strength is **not**
+a sufficient predictor of local
+distortion, much less perceived
+periodic artifacts. The screenshot
+has the highest native PSNR
+(**38.9015 dB**) but the lowest
+mean luminance SSIM (**.968722**).
+The received-image metrics are
+incremental embedding distortion
+after matching resize and JPEG
+processing, **not** total JPEG
+quality relative to the source.
+
+**Mechanistic hypotheses, not yet
+validated:** the global Fourier
+radial pilot may cause coherent
+low-contrast ringing on certain
+source spectra; Haar LL2 QIM
+can introduce local/block-structured
+luminance changes; the two can
+interact. The current adaptive pilot
+uses the **global fraction** of
+15×15 windows with luma variance
+<4 to scale a **global** Fourier
+modulation; it does not locally
+mask flat regions. Perceptual
+sensitivity to structure and local
+contrast is not captured by
+global PSNR/SSIM.
+
+New **research-only** ablation
+`tools/robust_qim_artifact_ablation_probe.py`
+and unit tests were committed, but
+**not executed** in this environment.
+With the same payload, nominal
+pilot .12 and DELTA38/REPEAT13,
+it produces and compares:
+(1) `PILOT_ONLY` vs original;
+(2) `QIM_ONLY` vs original;
+(3) `FULL` vs original;
+(4) `QIM_AFTER_PILOT` vs
+pilot-only, to isolate the
+incremental QIM change. CSV
+reports native PSNR, mean and
+p01 local SSIM, worst 16×16
+luma tile and fraction of changed
+pixels, plus luma MAE and
+change frequency separately on
+**flat** and **textured** regions
+using the encoder's own local
+variance criterion. Optional
+full-resolution original/pilot/QIM/
+full PNGs and 2×2 comparison
+panels remain on the user's
+computer; x8 difference maps
+are **diagnostics only**, not
+evidence of visible artifacts.
+
+**Required subjective check:**
+view unamplified native images at
+100% zoom on the same display
+and record for each source whether
+PILOT_ONLY, QIM_ONLY, and FULL
+show artifacts (e.g. 0=invisible,
+1=minor, 2=noticeable, 3=obvious).
+Only then compare subjective
+ratings to flat-region metrics
+and local SSIM. A successful
+blind decoder does not guarantee
+acceptable visual quality.
+Do not alter production code
+or prematurely implement spatial
+pilot gating: the current narrow
+radial rings may be broadened by
+spatial gating and lose geometric
+synchronization.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
