@@ -81,9 +81,12 @@ def test_probe_returns_oracle_rank_only_with_negative_control(
             0, 256, (64, 80, 3), dtype=np.uint8
         ), "RGB"
     ).save(source)
+    # Match the production pilot's RGB -> YCbCr -> RGB round trip.
+    # The negative control uses the same conversion, so disabling both
+    # embeddings must produce pixel-identical received images.
     monkeypatch.setattr(
         robust, "_pilot_embed",
-        lambda image, strength: image,
+        lambda image, strength: image.convert("YCbCr").convert("RGB"),
     )
     monkeypatch.setattr(
         robust, "_feedback_embed",
