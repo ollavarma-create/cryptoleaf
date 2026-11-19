@@ -54,7 +54,7 @@ def priority_candidates_from_peaks(
     Quota=50 exactly preserves the previous research and production order.
     Smaller quotas allocate more of the fixed budget across other peaks.
     """
-    if max_candidates < 1 or not 0 <= first_peak_quota <= max_candidates:
+    if max_candidates < 1 or first_peak_quota < 0:
         raise ValueError("Invalid candidate budget or first-peak quota")
     streams = [
         iter(robust._candidate_sizes(received_size, scale, limit=max_candidates))
@@ -71,7 +71,7 @@ def priority_candidates_from_peaks(
         return None
 
     if streams:
-        for _ in range(first_peak_quota):
+        for _ in range(min(first_peak_quota, max_candidates)):
             size = take(streams[0])
             if size is None:
                 break
