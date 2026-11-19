@@ -195,3 +195,48 @@ def test_probe_quota_sweep_does_not_reencode_per_quota(monkeypatch, tmp_path):
     assert {r["max_peaks"] for r in rows} == {4, 8}
     assert all(set(r) == set(spectral.columns()) for r in rows)
     assert calls == [(80, 64)]
+
+
+def test_probe_actual_blind_is_explicit_opt_in(monkeypatch, tmp_path):
+    source = tmp_path / "cover.png"
+    Image.fromarray(
+        np.random.default_rng(4).integers(
+            0, 256, (64, 80, 3), dtype=np.uint8
+        ),
+        "RGB",
+    ).save(source)
+    monkeypatch.setattr(robust, "_pilot_embed", lambda image, strength: image)
+    monkeypatch.setattr(robust, "_feedback_embed", lambda image, packet: image)
+    monkeypatch.setattr(
+        spectral, "decode_known_at_size",
+        lambda _image, _size, _payload: "PASS",
+    )
+    monkeypatch.setattr(
+        robust, "_profile",
+        lambda _image, bins, max_freq: np.random.default_rng(5).normal(size=bins),
+    )
+    calls = []
+
+    def fake_decode(received, candidates, payload):
+        calls.append((received.size, len(candidates), payload))
+        return "PASS", 2, "80x64"
+
+    monkeypatch.setattr(spectral, "decode_from_candidates", fake_decode)
+    kwargs = dict(
+        strengths=[0.12], scales=[0.75], peak_counts=[16],
+        first_peak_quotas=[10], variants=("all38",),
+    )
+    without = spectral.probe(source, b"payload", **kwargs)
+    assert without[0]["blind_status"] == "NOT_RUN"
+    assert without[0]["blind_attempts"] is None
+    assert calls == []
+
+    with_blind = spectral.probe(source, b"payload", run_blind=True, **kwargs)
+    assert len(calls) == 1
+    assert with_blind[0]["blind_status"] == "PASS"
+    assert with_blind[0]["blind_attempts"] == 2
+    assert with_blind[0]["blind_decoded_size"] == "80x64"
+    assert with_blind[0]["blind_width_error_px"] == 0
+    assert with_blind[0]["blind_height_error_px"] == 0
+    assert with_blind[0]["blind_same_ll2_shape"] is True
+    assert set(with_blind[0]) == set(spectral.columns())
