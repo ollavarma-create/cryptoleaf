@@ -102,6 +102,33 @@ def peak_summary(peaks: list[tuple[float, float]]) -> tuple[float | None, float 
     return peaks[0] if peaks else (None, None)
 
 
+def decode_from_candidates(
+    received: Image.Image,
+    candidates: list[tuple[int, int]],
+    payload: bytes,
+) -> tuple[str, int, str | None]:
+    """Decode using Fourier-generated candidate sizes, never an oracle hint.
+
+    This is a research-only search using the unchanged matched DWT decoder.
+    Return the number of safe candidates actually attempted.
+    """
+    attempts = 0
+    for size in candidates:
+        if max(size) > robust.MAX_LONGEST or (
+            size[0] * size[1] > robust.MAX_DECODE_PIXELS
+        ):
+            continue
+        attempts += 1
+        try:
+            recovered = robust.decode_at_size(received, size)
+        except ValueError:
+            continue
+        if recovered == payload:
+            return "PASS", attempts, f"{size[0]}x{size[1]}"
+        # A valid CRC32 but wrong payload is not success.
+    return "FAIL:not_recovered", attempts, None
+
+
 def parse_scales(value: str) -> list[float]:
     try:
         values = [float(part.strip()) for part in value.split(",")]
@@ -136,7 +163,8 @@ def columns() -> list[str]:
         "extended_candidate_count", "extended_true_size_rank",
         "extended_nearest_size_distance_px",
         "blind_status", "blind_attempts", "blind_decoded_size",
-        "seconds",
+        "extended_blind_status", "extended_blind_attempts",
+        "extended_blind_decoded_size", "seconds",
     ]
 
 
@@ -149,6 +177,7 @@ def probe(
     repeat: int,
     max_candidates: int,
     run_blind: bool,
+    run_extended_blind: bool = False,
 ) -> list[dict]:
     """One cover, several pilot strengths; matched DWT encoder/decoder."""
     with Image.open(source) as opened:
@@ -206,6 +235,9 @@ def probe(
                     "status": "OK",
                     "blind_attempts": None,
                     "blind_decoded_size": None,
+                    "extended_blind_status": "NOT_RUN",
+                    "extended_blind_attempts": None,
+                    "extended_blind_decoded_size": None,
                     "oracle": decode_known_at_size(
                         received, marked.size, payload
                     ),
@@ -238,6 +270,12 @@ def probe(
                     "extended_true_size_rank": erank,
                     "extended_nearest_size_distance_px": edist,
                 })
+                if run_extended_blind:
+                    (
+                        row["extended_blind_status"],
+                        row["extended_blind_attempts"],
+                        row["extended_blind_decoded_size"],
+                    ) = decode_from_candidates(received, extended, payload)
                 if run_blind:
                     try:
                         result = robust.decode(
@@ -276,6 +314,10 @@ def main() -> None:
         help="Also run slow unchanged production blind decode for every row",
     )
     parser.add_argument(
+        "--extended-blind", action="store_true",
+        help="Also decode using widened Fourier candidate list; research only",
+    )
+    parser.add_argument(
         "--message", default="CryptoLeaf v0.4 fixed-packet pilot sweep",
     )
     args = parser.parse_args()
@@ -303,7 +345,8 @@ def main() -> None:
         f"{len(paths)} covers × {len(strengths)} pilot strengths × "
         f"{len(scales)} scales = {len(paths)*len(strengths)*len(scales)} "
         f"diagnostic rows; DELTA={args.delta:g}, REPEAT={args.repeat}, "
-        f"production blind decode={'ON' if args.blind else 'OFF'}.",
+        f"production blind decode={'ON' if args.blind else 'OFF'}, "
+        f"extended blind decode={'ON' if args.extended_blind else 'OFF'}.",
         flush=True,
     )
     with args.csv.open("x", newline="", encoding="utf-8") as handle:
@@ -313,6 +356,7 @@ def main() -> None:
             rows = probe(
                 source, payload, strengths, scales, args.delta,
                 args.repeat, args.max_candidates, args.blind,
+                args.extended_blind,
             )
             for row in rows:
                 writer.writerow(row)
@@ -323,6 +367,7 @@ def main() -> None:
                     f"rank={row.get('standard_true_size_rank', '-')} "
                     f"extended_rank={row.get('extended_true_size_rank', '-')} "
                     f"blind={row.get('blind_status', '-')} "
+                    f"extended_blind={row.get('extended_blind_status', '-')} "
                     f"status={row['status']}",
                     flush=True,
                 )
@@ -332,7 +377,8 @@ def main() -> None:
         "The extended search only ranks candidates; it does not decode or "
         "alter production. Exact size rank=None does not prove that nearby "
         "dimensions cannot decode. Oracle success does not prove blind "
-        "recovery. Use --blind only for a small targeted follow-up."
+        "recovery. Use --blind and --extended-blind only for small targeted "
+        "follow-ups; extended decoding never changes production."
     )
 
 
