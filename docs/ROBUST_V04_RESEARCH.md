@@ -780,6 +780,86 @@ measuring false peaks and visual distortion. Do not simply
 increase pilot amplitude: the prior rank CSV shows it can
 degrade PSNR substantially without recovering more covers.
 
+### Blind recovery without exact pixel dimensions: two successes
+
+The user supplied `robust-v04-blind-anna-75-01.csv` and
+`robust-v04-blind-appfootprint-50-01.csv`. Both have one
+`status=OK`, `oracle=PASS` row. The **actual** blind
+decodes also **PASS** at matched DELTA=38, REPEAT=13,
+pilot strength 0.12:
+
+| Cover | Resize | Fourier search | True encoded dimensions | Successful decoded dimensions | Attempt | Elapsed |
+| --- | --- | --- | --- | --- | ---: | ---: |
+| Anna Maria Liikanen.jpg | 75% (960×650) | Current production-size search | 1280×867 | **1280×868** | 85 | 2.57 s |
+| appfootprint-main.png | 50% (599×338) | Experimental widened search | 1198×677 | **1200×677** | 146 | 2.94 s |
+
+In Anna Maria, the exact encoded size ranked **107/160** but
+decoding succeeded earlier, at a candidate **one pixel taller**.
+In AppFootprint, the exact encoded size did **not** appear in
+the 160 widened candidates, yet a candidate **two pixels
+wider** successfully decoded. This establishes that *exact
+size rank* is an insufficient proxy for **actual blind
+recoverability**. The decoded payload must match exactly,
+validated by RS8 and CRC32; candidate-size equality is
+not required.
+
+**Plausible mechanism grounded in the implementation:**
+The two-level Haar DWT uses `mode='periodization'`; its LL2
+grid is `ceil(height/4) × ceil(width/4)`. In both successful
+wrong-size cases the grid dimensions are unchanged:
+
+- Anna Maria: 1280×867 and 1280×868 both give **217×320** LL2.
+- AppFootprint: 1198×677 and 1200×677 both give **170×300** LL2.
+
+The seeded permutation of LL2 coefficient positions therefore
+stays identical; slight differences in image resampling can
+remain within QIM voting and RS8 correction margins.
+This is a strong *mechanistic hypothesis*, **not** proof that
+all candidates sharing the LL2 shape can decode or that a
+different LL2 shape always fails.
+
+The research tool now emits for both blind methods:
+`*_width_error_px`, `*_height_error_px`, and
+`*_same_ll2_shape`, with empty values for unsuccessful
+or unattempted decodes. Regression tests cover the two
+observed size pairs and the four-pixel LL2 grid boundaries.
+
+**Next: actual blind-recovery matrix** on the same five
+representative covers, at pilot strengths 0.12 and 0.18.
+At 75%, compare the existing search and the widened search
+side-by-side; at 50%, use only the widened search (production
+does not search near 0.50). These are separate, reproducible
+experiments, and no oracle hint is fed to blind decoding:
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_blind_sync_probe.py -q
+
+# 5 covers × 2 pilot strengths = 10 rows, 20 blind searches
+python tools/robust_blind_sync_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --pilot-strengths 0.12,0.18 \
+  --scales 0.75 --blind --extended-blind \
+  --csv results/robust-v04-blind-matrix-75-01.csv
+
+# 5 covers × 2 pilot strengths = 10 rows, 10 blind searches
+python tools/robust_blind_sync_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --pilot-strengths 0.12,0.18 \
+  --scales 0.5 --extended-blind \
+  --csv results/robust-v04-blind-matrix-50-01.csv
+```
+
+This is **20 encoded images and 30 actual blind searches**,
+each bounded to 160 Fourier candidates (plus the production
+decoder's two fallback candidates at 75%). A test may take
+minutes when many candidates fail. Compare actual PASS rate,
+successful size offsets/LL2-grid agreement, search attempts,
+and pilot-induced image quality. These five covers were
+chosen for diagnostic diversity, not as an unbiased random
+sample. No claim of universal blind recoverability or
+invisibility follows from two or twenty tests.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
