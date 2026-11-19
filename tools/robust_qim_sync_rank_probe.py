@@ -6,7 +6,7 @@ three-mask/two-stage detector. At each candidate size, Haar LL2 coefficients
 are sampled using the codec's public seeded permutation. Two *decoder-only*
 rankers are evaluated independently:
 
-  lattice:  cos(2*pi*LL2/DELTA) contrast at seeded vs unseeded positions
+  lattice:  cos(2*pi*LL2/DELTA) contrast at seeded vs provably unused positions
   header:   centred correlation of cos(pi*LL2/DELTA) with the known CLR1 bits
 
 A wrong seed and a wrong DELTA are predeclared negative controls for header.
@@ -35,7 +35,7 @@ import pywt
 from PIL import Image
 
 from src import robust_image as robust
-from src.robust_packet import MAGIC, pack
+from src.robust_packet import MAGIC, HEADER_BYTES, MAX_CODEWORD, pack
 from tools import robust_pilot_multimask_probe as multi
 from tools import robust_pilot_cascade_probe as cascade
 from tools import robust_pilot_angular_probe as angular
@@ -99,7 +99,9 @@ def score_ll2(
     """Public-header QIM scores and predeclared negative controls.
 
     Only 4 known magic bytes are used. No packet length, payload or
-    original size is used. Selected and negative-control sets are disjoint.
+    original size is used. The tail control is guaranteed unembedded
+    only if LL2 capacity exceeds the maximum possible packet capacity.
+    Otherwise lattice contrast is NaN and is ranked last.
     """
     flat = np.asarray(ll, dtype=np.float64).ravel()
     bits = np.unpackbits(np.frombuffer(MAGIC, dtype=np.uint8))
@@ -110,7 +112,13 @@ def score_ll2(
     template = np.repeat(1.0 - 2.0 * bits.astype(float), repeat)
     indices = np.random.default_rng(seed).permutation(flat.size)
     chosen = flat[indices[:count]]
-    negative = flat[indices[count:2 * count]]
+    # QIM embeds the *prefix* of the seeded permutation. Its next 416
+    # positions are still embedded for our packet, so they CANNOT serve
+    # as a negative control. Use the tail, only when its unembedded
+    # status is guaranteed for ANY legal CLR1 packet length.
+    max_embedded = (HEADER_BYTES + MAX_CODEWORD) * 8 * repeat
+    tail_is_unembedded = flat.size >= max_embedded + count
+    negative = flat[indices[-count:]] if tail_is_unembedded else None
     wrong_indices = np.random.default_rng(
         seed + WRONG_SEED_OFFSET
     ).permutation(flat.size)[:count]
@@ -121,9 +129,11 @@ def score_ll2(
     wrong_delta_phase = np.cos(
         np.pi * chosen / (delta * WRONG_DELTA_MULTIPLIER)
     )
-    lattice = float(
-        np.mean(np.cos(2 * np.pi * chosen / delta))
-        - np.mean(np.cos(2 * np.pi * negative / delta))
+    lattice = (
+        float(
+            np.mean(np.cos(2 * np.pi * chosen / delta))
+            - np.mean(np.cos(2 * np.pi * negative / delta))
+        ) if tail_is_unembedded else float("nan")
     )
     return {
         "lattice": lattice,
@@ -163,12 +173,18 @@ def rank_sizes(
         ranked[field] = [
             candidates[i] for i in sorted(
                 range(len(candidates)),
-                key=lambda i: (-scores[i][field], i),
+                key=lambda i: (
+                    -scores[i][field] if np.isfinite(scores[i][field])
+                    else float("inf"), i
+                ),
             )
         ]
     return ranked, {
         "scores": scores,
         "scored_count": len(scores),
+        "lattice_control_eligible_count": sum(
+            np.isfinite(score["lattice"]) for score in scores
+        ),
     }
 
 
@@ -217,7 +233,8 @@ def columns() -> list[str]:
         "received_width", "received_height", "resize_scale",
         "pilot_strength", "effective_pilot_strength", "adaptive_pilot",
         "delta", "repeat", "variants", "stages",
-        "max_ranked", "pool_total", "scored_count", "status", "oracle",
+        "max_ranked", "pool_total", "scored_count",
+        "lattice_control_eligible_count", "status", "oracle",
         "baseline_grid_rank", "header_grid_rank", "lattice_grid_rank",
         "wrong_seed_header_grid_rank", "wrong_delta_header_grid_rank",
         "baseline_exact_rank", "header_exact_rank", "lattice_exact_rank",
@@ -252,6 +269,7 @@ def evaluate(
     out = {
         "pool_total": len(pool),
         "scored_count": meta["scored_count"],
+        "lattice_control_eligible_count": meta["lattice_control_eligible_count"],
         "ranking_seconds": round(ranking_seconds, 3),
         "blind_budget": blind_budget,
     }
