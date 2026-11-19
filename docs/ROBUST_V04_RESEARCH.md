@@ -100,6 +100,31 @@ The pilot sweep now reports `oracle@0.75` (resized image decoded with the **true
 
 The 0.12 result (54 candidates) is a useful research point, **not** a safe default: robustness across images, crops, JPEG after resize, and other scales is unmeasured. Preserve a separate next test directory and CSV; the tool does not overwrite previous runs.
 
+### Oracle-scale and blind-search result
+
+On the 1198×677 screenshot scaled to 75%, the oracle-size recovery and exact original-size candidate rank were:
+
+| Nominal Fourier strength | Oracle packet recovery | Exact-size candidate rank |
+| ---: | :---: | ---: |
+| 0.00 | FAIL | absent |
+| 0.04 | FAIL | absent |
+| 0.08 | FAIL | absent |
+| 0.12 | PASS | 54 |
+| 0.18 | PASS | 1 |
+
+The `oracle` decoder restores the image to the original dimensions with Lanczos before reading LL2. Therefore a FAIL may reflect quantized bit damage after downsample+upsample, not just the Fourier size estimate. A missing rank means absent from the **bounded** candidate list, not necessarily absent from all possible scales.
+
+Run `tools/robust_resize_diagnostics.py` against the existing pilot-sweep directory to count repeated QIM errors, majority-voted packet bit errors, header errors and Reed–Solomon codeword byte errors before correction. This diagnoses whether failures are dominated by header damage or codeword damage. It does not modify the codec or original files.
+
+```bash
+python tools/robust_resize_diagnostics.py \
+  /home/jari/Pictures/0-4-mosaic-out/pilot-sweep-02 \
+  --scale 0.75 \
+  --csv results/robust-v04-resize-errors-01.csv
+```
+
+**Visual interpretation:** the user clarified that the original `pilot-sweep-reference.png` is clean; all `strength-*.png` outputs contain DWT embedding, and the black-background `*-vs-zero-diff.png` files amplify differences by 12×. Amplified diff visibility must not be confused with normal-view perceptibility.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
