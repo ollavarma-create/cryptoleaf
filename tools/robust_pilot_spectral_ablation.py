@@ -10,10 +10,11 @@ compare four pilot *detectors* on the SAME received pixels:
 
 All variants search 0.45..1.02 and use the SAME 160-candidate Priority50
 ordering. Only all38 matches the previous experimental extended detector.
-No detector variant is installed in production. The known encoded dimensions
-are used ONLY for diagnostic labels and the separate oracle check, NEVER to
-generate or reorder blind candidates. This tool ranks candidates; it does
-not run expensive blind packet decoding.
+No detector variant is installed in production. Optionally compare
+different counts of correlation peaks, and pilot=0 as a negative control.
+The known encoded dimensions are used ONLY for diagnostic labels and the
+separate oracle check, NEVER to generate or reorder blind candidates.
+This tool ranks candidates; it does not run expensive blind packet decoding.
 """
 from __future__ import annotations
 
@@ -109,6 +110,34 @@ def select_peaks(
     )[:max_peaks]
 
 
+def nearest_peak_diagnostic(
+    peaks: list[tuple[float, float]], actual_scale: float,
+    tolerance: float = 0.01,
+) -> tuple[int | None, float | None]:
+    """True-scale local peak rank and closest peak distance, diagnostic only.
+
+    Peak lists are ranked by correlation strength. The actual scale is used
+    ONLY after peaks are independently selected, never to select candidates.
+    """
+    if not peaks:
+        return None, None
+    rank, closest = min(
+        enumerate(peaks, 1), key=lambda pair: abs(pair[1][0] - actual_scale)
+    )
+    distance = abs(closest[0] - actual_scale)
+    return (rank if distance <= tolerance else None), round(distance, 6)
+
+
+def parse_peak_counts(value: str) -> list[int]:
+    try:
+        counts = [int(x.strip()) for x in value.split(",")]
+    except ValueError as exc:
+        raise ValueError("Peak counts must be comma-separated integers") from exc
+    if not counts or any(n < 1 or n > 64 for n in counts):
+        raise ValueError("Peak counts must be between 1 and 64")
+    return list(dict.fromkeys(counts))
+
+
 def same_ll2_shape(a: tuple[int, int], b: tuple[int, int]) -> bool:
     return ((a[0] + 3) // 4, (a[1] + 3) // 4) == (
         (b[0] + 3) // 4, (b[1] + 3) // 4
@@ -138,9 +167,10 @@ def columns() -> list[str]:
         "received_width", "received_height", "resize_scale",
         "actual_width_scale", "pilot_strength", "effective_pilot_strength",
         "delta", "repeat", "oracle", "status", "variant",
-        "profile_max_freq", "ring_count", "candidate_limit",
+        "profile_max_freq", "ring_count", "candidate_limit", "max_peaks",
         "best_peak_scale", "best_peak_score", "top_four_peak_scales",
         "true_scale_score", "true_scale_score_percentile",
+        "true_scale_local_peak_rank", "nearest_local_peak_distance",
         "candidate_count", "exact_size_rank", "same_ll2_safe_rank",
         "safe_candidates_examined_for_grid", "nearest_size_distance_px",
         "seconds",
@@ -151,6 +181,8 @@ def probe(
     source: Path, payload: bytes, strengths: list[float],
     scales: list[float], delta: float = 38.0,
     repeat: int = 13, candidate_limit: int = 160,
+    peak_counts: list[int] | None = None,
+    variants: tuple[str, ...] | None = None,
 ) -> list[dict]:
     with Image.open(source) as opened:
         reference = reference_image(opened)
@@ -164,13 +196,19 @@ def probe(
         "repeat": repeat,
         "candidate_limit": candidate_limit,
     }
+    if peak_counts is None:
+        peak_counts = [4]
+    if variants is None:
+        variants = tuple(name for name, _, _ in VARIANTS)
     rows = []
     with codec_parameters(delta, repeat):
         for strength in strengths:
-            marked = robust._feedback_embed(
-                robust._pilot_embed(reference, strength=strength),
-                packet,
+            pilot = (
+                reference.convert("YCbCr").convert("RGB")
+                if strength == 0 else
+                robust._pilot_embed(reference, strength=strength)
             )
+            marked = robust._feedback_embed(pilot, packet)
             for scale in scales:
                 received_size = tuple(
                     max(32, round(d * scale)) for d in marked.size
@@ -189,56 +227,70 @@ def probe(
                     for freq in (0.38, 0.48)
                 }
                 for variant, freq, inner_only in VARIANTS:
+                    if variant not in variants:
+                        continue
                     started = time.perf_counter()
                     scale_values, scores = score_spectrum(
                         profiles[freq], freq, inner_only
                     )
-                    peaks = select_peaks(scale_values, scores)
-                    candidates = priority_candidates_from_peaks(
-                        received.size, peaks, candidate_limit
+                    all_peaks = select_peaks(
+                        scale_values, scores, max_peaks=len(scale_values)
                     )
-                    exact_rank, nearest = rank_and_distance(
-                        candidates, marked.size
-                    )
-                    grid_rank, safe_examined = first_safe_grid_rank(
-                        candidates, marked.size
+                    local_rank, local_distance = nearest_peak_diagnostic(
+                        all_peaks, actual_scale
                     )
                     true_score = float(np.interp(
                         actual_scale, scale_values, scores
                     ))
-                    rows.append({
-                        **base,
-                        "received_width": received.width,
-                        "received_height": received.height,
-                        "resize_scale": scale,
-                        "actual_width_scale": round(actual_scale, 8),
-                        "pilot_strength": strength,
-                        "effective_pilot_strength": round(
-                            effective_strength(reference, strength), 6
-                        ),
-                        "oracle": oracle,
-                        "status": "OK",
-                        "variant": variant,
-                        "profile_max_freq": freq,
-                        "ring_count": int(np.sum(
-                            robust.RADII <= 0.16
-                        )) if inner_only else len(robust.RADII),
-                        "best_peak_scale": peaks[0][0] if peaks else None,
-                        "best_peak_score": peaks[0][1] if peaks else None,
-                        "top_four_peak_scales": ";".join(
-                            f"{s:.3f}" for s, _ in peaks
-                        ),
-                        "true_scale_score": true_score,
-                        "true_scale_score_percentile": round(
-                            100 * float(np.mean(scores <= true_score)), 2
-                        ),
-                        "candidate_count": len(candidates),
-                        "exact_size_rank": exact_rank,
-                        "same_ll2_safe_rank": grid_rank,
-                        "safe_candidates_examined_for_grid": safe_examined,
-                        "nearest_size_distance_px": nearest,
-                        "seconds": round(time.perf_counter() - started, 3),
-                    })
+                    for max_peaks in peak_counts:
+                        peaks = all_peaks[:max_peaks]
+                        candidates = priority_candidates_from_peaks(
+                            received.size, peaks, candidate_limit
+                        )
+                        exact_rank, nearest = rank_and_distance(
+                            candidates, marked.size
+                        )
+                        grid_rank, safe_examined = first_safe_grid_rank(
+                            candidates, marked.size
+                        )
+                        rows.append({
+                            **base,
+                            "received_width": received.width,
+                            "received_height": received.height,
+                            "resize_scale": scale,
+                            "actual_width_scale": round(actual_scale, 8),
+                            "pilot_strength": strength,
+                            "effective_pilot_strength": round(
+                                effective_strength(reference, strength), 6
+                            ),
+                            "oracle": oracle,
+                            "status": "OK",
+                            "variant": variant,
+                            "profile_max_freq": freq,
+                            "ring_count": int(np.sum(
+                                robust.RADII <= 0.16
+                            )) if inner_only else len(robust.RADII),
+                            "max_peaks": max_peaks,
+                            "best_peak_scale": peaks[0][0] if peaks else None,
+                            "best_peak_score": peaks[0][1] if peaks else None,
+                            "top_four_peak_scales": ";".join(
+                                f"{s:.3f}" for s, _ in peaks[:4]
+                            ),
+                            "true_scale_score": true_score,
+                            "true_scale_score_percentile": round(
+                                100 * float(np.mean(scores <= true_score)), 2
+                            ),
+                            "true_scale_local_peak_rank": local_rank,
+                            "nearest_local_peak_distance": local_distance,
+                            "candidate_count": len(candidates),
+                            "exact_size_rank": exact_rank,
+                            "same_ll2_safe_rank": grid_rank,
+                            "safe_candidates_examined_for_grid": safe_examined,
+                            "nearest_size_distance_px": nearest,
+                            "seconds": round(
+                                time.perf_counter() - started, 3
+                            ),
+                        })
     return rows
 
 
@@ -251,12 +303,30 @@ def main() -> None:
     parser.add_argument("--scales", default="0.75,0.5")
     parser.add_argument("--max-candidates", type=int, default=160)
     parser.add_argument(
+        "--peak-counts", default="4",
+        help="Comma-separated peak budgets, e.g. 4,8,12; default 4",
+    )
+    parser.add_argument(
+        "--variants", default="all38,inner38,all48,inner48",
+        help="Comma-separated detector variants",
+    )
+    parser.add_argument(
         "--message", default="CryptoLeaf v0.4 fixed-packet pilot sweep"
     )
     args = parser.parse_args()
     try:
         strengths = parse_strengths(args.pilot_strengths)
         scales = parse_scales(args.scales)
+        peak_counts = parse_peak_counts(args.peak_counts)
+        variants = tuple(dict.fromkeys(
+            part.strip() for part in args.variants.split(",")
+        ))
+        known_variants = {name for name, _, _ in VARIANTS}
+        if not variants or any(v not in known_variants for v in variants):
+            raise ValueError(
+                "--variants must select one or more of " +
+                ",".join(sorted(known_variants))
+            )
         if not 1 <= args.max_candidates <= 1000:
             raise ValueError("--max-candidates must be 1..1000")
         paths = image_paths(
@@ -274,8 +344,9 @@ def main() -> None:
     args.csv.parent.mkdir(parents=True, exist_ok=True)
     print(
         f"{len(paths)} covers × {len(strengths)} pilot strengths × "
-        f"{len(scales)} scales × {len(VARIANTS)} detector variants "
-        f"= {len(paths)*len(strengths)*len(scales)*len(VARIANTS)} rows",
+        f"{len(scales)} scales × {len(variants)} detector variants × "
+        f"{len(peak_counts)} peak budgets = "
+        f"{len(paths)*len(strengths)*len(scales)*len(variants)*len(peak_counts)} rows",
         flush=True,
     )
     with args.csv.open("x", newline="", encoding="utf-8") as handle:
@@ -286,6 +357,7 @@ def main() -> None:
                 rows = probe(
                     source, payload, strengths, scales,
                     candidate_limit=args.max_candidates,
+                    peak_counts=peak_counts, variants=variants,
                 )
             except ValueError as exc:
                 print(
@@ -300,6 +372,7 @@ def main() -> None:
                     f"pilot={row['pilot_strength']} "
                     f"resize={row['resize_scale']} "
                     f"variant={row['variant']} "
+                    f"peaks={row['max_peaks']} "
                     f"oracle={row['oracle']} "
                     f"grid_rank={row['same_ll2_safe_rank']} "
                     f"best_scale={row['best_peak_scale']}",
