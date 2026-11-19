@@ -21,6 +21,25 @@ def test_parse_variants_and_default_order():
             multi.parse_variants(invalid)
 
 
+def test_unmasked_detector_matches_original_fourier_peaks():
+    image = Image.fromarray(
+        np.random.default_rng(23).integers(
+            0, 256, (96, 128, 3), dtype=np.uint8
+        ), "RGB"
+    )
+    baseline = robust._peaks(
+        image, low=0.45, high=1.02, max_peaks=16
+    )
+    received_only = multi.variant_peaks(
+        multi.angular.fft_workspace(image), 0.38, 0.0, 16
+    )
+    assert len(received_only) == len(baseline)
+    np.testing.assert_allclose(
+        np.asarray(received_only), np.asarray(baseline),
+        rtol=0, atol=1e-9,
+    )
+
+
 def test_cross_variant_dedup_preserves_distinct_pixel_sizes(monkeypatch):
     monkeypatch.setattr(multi.angular, "fft_workspace", lambda image: "fft")
     monkeypatch.setattr(
