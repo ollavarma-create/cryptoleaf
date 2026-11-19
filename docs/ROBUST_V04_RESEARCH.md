@@ -628,6 +628,87 @@ production parameters or on-image format have been changed.
 Do not claim 50% blind support until it is actually demonstrated
 with a validated widened-search decoder and independent controls.
 
+### Fourier blind-size ranking on five representative covers
+
+The user supplied `robust-v04-blind-sync-rank-01.csv`:
+**30/30 oracle-size decodes PASS**, with five covers × three nominal
+pilot strengths (0, 0.12, 0.18) × two Lanczos resize scales
+(75%, 50%), fixed DWT **38/13**. The *actual* blind decoder was
+**not run** in this CSV (`blind_status=NOT_RUN` for every row).
+
+Exact encoded dimensions among the first 160 Fourier candidates:
+
+| Received resize | Production .70–1.02 | Experimental .45–1.02 |
+| --- | ---: | ---: |
+| 75% | 6/15 | 6/15 |
+| 50% | 0/15 | 2/15 |
+| Total | 6/30 | 8/30 |
+
+For both searches, pilot=0 had **0/10** exact-size hits;
+pilot=0.12 and 0.18 each had **3/5** hits at 75% in the
+production search. Those covers were AppFootprint, Anna Maria
+Liikanen and P1000450; the small Aarne and CryptoLeaf screenshot
+never had an exact 75%-size hit. The widened search recovered
+the exact 50% size only for **P1000450.JPG** at both nonzero
+strengths, rank **1**. AppFootprint at 50% came within **one
+Manhattan pixel** of the correct dimensions with both nonzero
+strengths, but exact size was not in the list. Anna Maria at
+50% was at least 92 pixels away at strength .12, Aarne 113
+pixels away and CryptoLeaf screenshot 18 pixels away.
+
+The pilot also has a material quality cost on some covers:
+Anna Maria PSNR **43.6895 dB** at pilot=0, **38.4070 dB**
+at pilot=.12 and **35.6958 dB** at pilot=.18. On Aarne
+pilot=.18 reduced PSNR only from 32.7727 to 32.5496 dB,
+yet did not improve the candidate rank. More pilot power
+is not a general fix. The fixed pilot=0 controls are important
+because image-content peaks can mimic a pilot.
+
+The production Fourier search cannot rank true 50% scales
+because its minimum scale is .70. Simply extending the scale
+range to .45 is **insufficient**: exact-size hit rate is only
+2/15 at 50%. The pilot frequency rings near 0.195 cyc/pixel
+also move near 0.39 cyc/pixel after 50% reduction, above the
+current profile's 0.38 upper bound. This is a hypothesis for
+further controlled signal-processing analysis, not a proven
+cause of every miss. A size candidate not exactly matching
+the original dimensions may still decode; the rank test
+does not establish actual blind success or failure.
+
+**Next narrow gate:** verify that the matched DWT decoder
+actually recovers a message when Fourier ranks the exact
+dimensions, before changing pilot/size estimation. The
+research probe now supports `--extended-blind`, which
+attempts decoding only from the widened Fourier candidates;
+it never uses the known original size as a hint or modifies
+the production decoder. Run one 75% production case and one
+50% extended case:
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_blind_sync_probe.py -q
+
+python tools/robust_blind_sync_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name appfootprint-main.png \
+  --pilot-strengths 0.12 --scales 0.75 --blind \
+  --csv results/robust-v04-blind-actual-75-01.csv
+
+python tools/robust_blind_sync_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name P1000450.JPG \
+  --pilot-strengths 0.12 --scales 0.5 --extended-blind \
+  --csv results/robust-v04-blind-actual-50-01.csv
+```
+
+If both succeed, pilot size ranking is the principal
+remaining limitation in these selected cases; do not
+generalize from two successes to all covers. Next examine
+pilot peak scores and alternative scale estimators at 50%
+and investigate the one-pixel AppFootprint miss. Do not
+change the CLR1 format, production parameters or adaptive
+pilot strength based on this diagnostic alone.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
