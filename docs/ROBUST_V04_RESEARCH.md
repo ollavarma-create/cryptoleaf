@@ -3361,6 +3361,108 @@ coverage fails, treat it as a separate
 geometry-search problem rather than
 adjusting the packet decoder.
 
+### Six held-out covers × three off-prior resize factors: 18/18 blind recovery, 0/18 unmarked
+
+User-supplied paired CSVs:
+`robust-v04-qim-heldout-marked-01.csv` (18 rows)
+and `robust-v04-qim-heldout-unmarked-01.csv` (18 rows).
+Six **new, user-selected** covers, each tested at
+LANCZOS resize factors **.55, .68, .83**.
+Both arms match exactly on source SHA256,
+received dimensions, and resize scale.
+The source names and hashes are intentionally
+**not published** in this repository.
+
+Frozen parameters: nominal adaptive pilot
+strength .12 (effective strengths vary by
+image, .036–.119894), `DELTA=38`,
+`REPEAT=13`, `min_scale=.5`,
+`height_jitter=2`, `top_grids=5`,
+and `decode_budget=40`.
+
+**Marked:** 18/18 `status=OK`, 18/18
+`oracle=PASS`, 18/18 `blind_status=PASS`.
+The correct LL2 grid has **coarse rank 1**
+in all 18 cases, the exact original pixel
+size has **refined rank 1** in all 18, and
+the actual CRC-validated payload is
+recovered in **exactly one decoder call**
+for each. All 18 decoded sizes equal
+their original encoded dimensions.
+
+**Unmarked:** 18/18
+`decode_status=NO_VALID_PACKET`,
+`any_valid_packet=False`, with **562**
+total decoder calls. The unmarked
+candidate lists can have fewer than 40
+refined sizes; each test checks up to
+40 candidates, not necessarily 40.
+
+| Resize | Marked blind PASS | Unmarked valid packets | Mean marked end-to-end seconds |
+| --- | ---: | ---: | ---: |
+| .55 | 6/6 | 0/6 | 11.141 |
+| .68 | 6/6 | 0/6 | 10.673 |
+| .83 | 6/6 | 0/6 | 8.716 |
+| **All** | **18/18** | **0/18** | **10.1765** |
+
+**Separation in this frozen validation set:**
+minimum marked correct-grid coarse CLR1
+correlation **.245896** vs maximum unmarked
+coarse maximum **.157595**, a **.088301**
+gap. Minimum marked exact-size refined
+correlation **.778426** vs maximum unmarked
+refined maximum **.157692**, a **.620734**
+gap. Minimum correct-grid-vs-best-wrong-grid
+margin within a marked case is only
+**.085257**, at the .83 resize of one
+photograph. These are empirical
+development/validation-set gaps, **not**
+precalibrated universal decision thresholds.
+
+Timing: marked bank generation **.019974 s**,
+coarse scoring **159.120 s**, refinement
+**23.062 s**, and actual decoder **.975 s**
+over 18 cases: total **183.176974 s**,
+mean **10.1765 s/case**. Coarse scoring
+accounts for **86.9%** of marked total.
+Unmarked total **190.634358 s** over
+18 cases (mean **10.5908 s/case**),
+including **16.046 s** spent in unsuccessful
+decoder attempts.
+
+**Interpretation and limits:** this is
+strong evidence of blind payload recovery
+with **unknown, off-prior isotropic resize
+factors** under a predeclared geometry
+search. There are **six distinct source
+covers**, not 18 statistically independent
+covers; resize outcomes are correlated.
+The search assumes preserved aspect ratio,
+minimum scale .5, and the codec's maximum
+image size. Images were **not JPEG
+recompressed after resize**, cropped,
+nonuniformly resized, or processed by a
+real social media service. Zero observed
+false packets in 18 controls is not proof
+of a zero false-positive probability.
+Do not tune a CLR1 cutoff on this set and
+then treat it as independent validation.
+
+**Next predeclared experiment:** freeze
+the QIM grid search and test **resize
+followed by JPEG recompression** with
+quality **85 and 70**, 4:2:0 chroma
+subsampling, and the same .55/.68/.83
+scales, recording oracle vs blind recovery
+separately and matched unmarked false
+packets. The six covers become a
+JPEG-transform development set once this
+test is run. Investigate failures by
+separating payload survival (oracle)
+from grid candidate selection (blind).
+No production changes until robustness
+and visual quality are assessed.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
