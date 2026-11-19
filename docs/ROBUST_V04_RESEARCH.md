@@ -2596,7 +2596,7 @@ does not add candidates or change the codec.
   generate or rank candidates.
 
 The tool also measures predeclared wrong-seed
-(`SEED+1`) and wrong-delta (`DELTA*1.17`)
+(`SEED+1`) and wrong-delta (`DELTA*1.5`)
 header controls. The **known original size is
 used only after scoring** to calculate exact
 and LL2-grid candidate ranks. An LL2-grid match
