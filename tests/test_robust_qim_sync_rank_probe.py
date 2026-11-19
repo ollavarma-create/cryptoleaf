@@ -84,7 +84,7 @@ def test_stable_tie_break_and_control_rankers(monkeypatch):
 
 
 def test_evaluate_blind_equal_budget_and_no_oracle_in_ranker(monkeypatch):
-    sizes = [(100, 80), (101, 80), (102, 80)]
+    sizes = [(100, 80), (105, 80), (109, 80)]
     monkeypatch.setattr(
         qim, "frozen_candidates", lambda received: sizes
     )
@@ -113,7 +113,7 @@ def test_evaluate_blind_equal_budget_and_no_oracle_in_ranker(monkeypatch):
         raise ValueError("no packet")
     monkeypatch.setattr(robust, "decode_at_size", decoder)
     result = qim.evaluate(
-        Image.new("RGB", (60, 48)), (102, 80), b"payload",
+        Image.new("RGB", (60, 48)), (109, 80), b"payload",
         max_ranked=3, blind_budget=2,
     )
     assert result["baseline_blind_status"].startswith("FAIL")
