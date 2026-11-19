@@ -3508,6 +3508,129 @@ actual platforms may crop, rescale,
 recompress, strip metadata or apply
 other transformations.
 
+### Resize then JPEG 4:2:0 recompression: 36/36 blind recoveries, 0/36 controls
+
+User-supplied `robust-v04-qim-jpeg-recompress-01.csv`:
+**72 rows**, six previously held-out (now
+JPEG-development) covers × three resize
+factors (.55/.68/.83) × JPEG qualities
+(85/70) × two paired arms. Exact pipeline:
+RGB marked/unmarked → LANCZOS resize →
+**one** JPEG encode/decode with 4:2:0
+chroma subsampling. Source hashes and
+received pixel dimensions match between
+the marked and unmarked arms for every
+source/scale/quality pair. No initial
+JPEG encode of the marked upload before
+resizing, no crop, no real social-media
+processing.
+
+Frozen algorithm: adaptive nominal pilot
+strength .12 (effective .036–.119894),
+QIM `DELTA=38`, `REPEAT=13`,
+`min_scale=.5`, `height_jitter=2`,
+`top_grids=5`, 40 decoder calls maximum.
+
+| Resize | JPEG85 marked blind PASS | JPEG70 marked blind PASS | Matched unmarked false packets |
+| --- | ---: | ---: | ---: |
+| .55 | 6/6 | 6/6 | 0/12 |
+| .68 | 6/6 | 6/6 | 0/12 |
+| .83 | 6/6 | 6/6 | 0/12 |
+| **All** | **18/18** | **18/18** | **0/36** |
+
+All **36/36 marked** cases have
+`oracle=PASS`, `decode_status=PASS`,
+`coarse_true_grid_rank=1`,
+`refined_exact_rank=1`,
+`decode_attempts=1`, and decoded size
+equal to the original encoded size.
+All **36/36 unmarked** controls report
+`NO_VALID_PACKET`, `any_valid_packet=False`.
+The unmarked arm made **1,198 actual
+decoder attempts** across its 36 cases.
+The controls test acceptance of *any*
+CRC-validated packet, not a specific
+expected payload.
+
+**Correlations and margins:** minimum
+marked correct-grid coarse score
+**.209527**; maximum unmarked coarse
+score **.180757**; observed cross-arm
+gap **.028770**. Minimum within-case
+marked correct-vs-best-wrong-grid margin
+**.057839** (a photograph at .68, Q70).
+Minimum marked exact-size refined score
+**.668504**; maximum unmarked refined
+score **.180757** (gap **.487747**).
+The weakest coarse case was one photo
+at .68/Q70: correct grid **.209527**,
+best wrong grid **.151688**, refined
+exact-size **.788886**. Lower JPEG
+quality 70 reduced the refined exact
+score compared with quality 85 in
+**all 18 paired source/scale cases**
+(mean reduction **.049673**) but
+none lost payload recovery. These
+gaps are not calibrated decision
+thresholds and do not justify
+threshold selection on this set.
+
+**Measured timing:** marked
+bank **.040 s**, coarse QIM **315.996 s**,
+refinement **46.669 s**, decoder
+**1.757 s**; total **364.462 s**
+(average **10.124 s/case**).
+Coarse scoring is **86.7%** of total.
+Unmarked total **385.313 s**
+(average **10.703 s/case**), with
+**34.550 s** spent on unsuccessful
+decoder calls. Timing is not
+a controlled benchmark.
+
+**Interpretation:** substantial evidence
+that the current blind LL2-grid search
+and packet embedding survive this
+**simulated resize→JPEG70/85 4:2:0
+pipeline**, under the declared scale
+and aspect-ratio constraints. These
+are six distinct covers and 36
+correlated transforms, not 36
+independent source samples. Zero
+false positives in 36 controls does
+not prove a zero false-positive rate.
+This experiment does **not** test
+initial JPEG upload compression
+followed by a second JPEG pass,
+real social-media services,
+crop/nonuniform resize, or
+perceptual invisibility. In
+particular, previous small-UI
+screenshot testing exposed visible
+pilot artifacts; recovery success
+must not be mistaken for acceptable
+visual quality.
+
+**Next predeclared gate:** before
+production integration or
+score-based early exits, measure
+image fidelity on the same
+marked/unmarked paired transforms
+and native marked images using
+existing `quality_metrics` (PSNR,
+mean Y-SSIM, 1st-percentile local
+SSIM, worst 16×16 luminance tile,
+fraction of pixels with >4 and >8
+RGB-channel change). Inspect
+unmodified, full-resolution
+screenshot crops for structured
+pilot artifacts. Only after
+acceptable quality should a
+second-pass JPEG pipeline and
+runtime optimization be tested.
+Do not change the production codec
+or tune thresholds on these
+development cases.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
