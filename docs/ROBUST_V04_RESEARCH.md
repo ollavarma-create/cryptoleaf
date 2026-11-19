@@ -125,6 +125,30 @@ python tools/robust_resize_diagnostics.py \
 
 **Visual interpretation:** the user clarified that the original `pilot-sweep-reference.png` is clean; all `strength-*.png` outputs contain DWT embedding, and the black-background `*-vs-zero-diff.png` files amplify differences by 12×. Amplified diff visibility must not be confused with normal-view perceptibility.
 
+### 75% resize: packet bit errors and vulnerable CLR1 header
+
+The user's `robust-v04-resize-errors-01.csv` confirms that the three weak-pilot failures are dominated by **one corrupted bit in the unprotected 16-bit CLR1 codeword-length field**, not wholesale data loss. Only real encoded images count; the first diagnostics version accidentally included `*-vs-zero-diff.png` (12×-amplified visual difference maps), which are **not stego images** and yield meaningless packet-error rows. The tool now filters them.
+
+| Pilot nominal | Repeated QIM errors after resize | Majority bit errors | Header bit errors | RS codeword byte errors | Oracle |
+| ---: | ---: | ---: | ---: | ---: | :---: |
+| 0.00 | 517 | 1 | 1 | 0 | FAIL |
+| 0.04 | 516 | 2 | 1 | 1 | FAIL |
+| 0.08 | 509 | 2 | 1 | 1 | FAIL |
+| 0.12 | 499 | 1 | 0 | 1 | PASS |
+| 0.18 | 500 | 1 | 0 | 1 | PASS |
+
+RS8 corrects up to four **codeword byte** errors but does not cover the 6-byte CLR1 header. A single majority-voted length-bit error causes `Invalid CLR1 length` and prevents attempting Reed–Solomon recovery, even when the codeword is otherwise intact or within RS8's correction capability.
+
+The diagnostics tool now offers a **one-bit length repair probe**, limited to the oracle-size scenario. It flips one of the 16 observed length bits, tries bounded plausible packet lengths, and accepts a candidate only if RS8 decoding plus CRC32 validates and the payload matches the known test message. This is research instrumentation, **not** a production decoder change. A PASS would support a backward-compatible header recovery strategy. It cannot by itself solve weak-pilot blind size estimation: the true size was absent from the bounded search for strengths 0–0.08.
+
+```bash
+python -m pytest tests/test_robust_resize_diagnostics.py -q
+python tools/robust_resize_diagnostics.py \
+  /home/jari/Pictures/0-4-mosaic-out/pilot-sweep-02 \
+  --scale 0.75 \
+  --csv results/robust-v04-resize-errors-02.csv
+```
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
