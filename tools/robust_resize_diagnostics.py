@@ -97,9 +97,12 @@ def main() -> None:
         parser.error("--scale must be between 0.2 and 2.0")
     if args.csv and args.csv.exists():
         parser.error("CSV already exists; refusing overwrite: " + str(args.csv))
-    files = sorted(args.directory.glob("s*-strength-*.png"))
+    files = sorted(
+        path for path in args.directory.glob("s*-strength-*.png")
+        if not path.name.endswith("-vs-zero-diff.png")
+    )
     if not files:
-        parser.error("No strength PNG files in " + str(args.directory))
+        parser.error("No encoded strength PNG files in " + str(args.directory))
     packet = pack(args.message.encode("utf-8"))
     rows = [inspect_file(path, packet, args.scale) for path in files]
     for row in rows:
