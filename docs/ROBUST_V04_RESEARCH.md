@@ -3781,6 +3781,85 @@ radial rings may be broadened by
 spatial gating and lose geometric
 synchronization.
 
+### Visual ablation confirms LL2 QIM as primary visible-artifact source
+
+User-supplied `robust-v04-artifact-ablation-01.csv`:
+six sources × four native-resolution ablation
+variants = **24 rows**. The user inspected
+the unamplified images and reports that
+`PILOT_ONLY` shows **no visible artifact**
+in the examined covers, whereas the other
+variants (`QIM_ONLY` and `FULL`) show
+visible patterns. This is a qualitative
+observation, not a numerical visibility
+score for each individual cover.
+
+| Variant | Native PSNR range (dB) | 1% local SSIM range | Mean pixels >4 RGB-channel units |
+| --- | ---: | ---: | ---: |
+| PILOT_ONLY | 40.8007–47.6754 | .961629–.995773 | 2.5457% |
+| QIM_ONLY | 41.0164–42.1592 | .781179–.919932 | 5.4602% |
+| FULL | 36.9527–38.9015 | .779638–.908420 | 30.3008% |
+| QIM_AFTER_PILOT (vs PILOT_ONLY) | 40.7259–42.1841 | .781310–.921853 | 5.3815% |
+
+The screenshot has 1% local SSIM
+`PILOT_ONLY=.989516`,
+`QIM_ONLY=.785203`,
+`FULL=.786414`.
+The near-equality of `QIM_ONLY` and
+`FULL` local SSIM on multiple covers,
+plus the user's direct visual assessment,
+strongly implicates the **Haar LL2 QIM
+payload embedding**, not the Fourier
+pilot, as the primary cause of
+structured visible artifacts under
+the current parameters. The Fourier
+pilot still contributes to total
+distortion (FULL has lower PSNR)
+but does not show the same visual
+artifact in isolation. No new
+payload-recovery test is implied
+by this ablation.
+
+**Mechanism hypothesis:** parity QIM
+at `DELTA=38` changes LL2 coefficients
+that reconstruct as roughly 4×4
+luminance regions, potentially exposing
+block structure on low-texture or
+highly regular content. The data
+do not prove that block quantization
+is the sole cause; perception is
+content-dependent.
+
+**Predeclared, no-code-change parameter
+experiment:** keep the same six covers,
+payload, adaptive pilot nominal .12,
+`REPEAT=13`, transform order and
+decoder, and compare `DELTA=38`
+baseline against **32, 26, 20**.
+First run `robust_qim_artifact_ablation_probe.py`
+at each delta, comparing full-size
+`QIM_ONLY` and `FULL` images and
+local SSIM. Record subjective
+visibility 0–3 for each source/delta.
+Only if a candidate improves visibility
+should `robust_qim_blind_grid_jpeg_probe.py`
+retest **all** six covers ×
+.55/.68/.83 × JPEG85/70 with the
+matching delta, retaining all 36
+marked blind results, oracle results,
+and 36 negative controls. Do not
+treat visual improvement as proof
+of JPEG robustness. Avoid changing
+`REPEAT`, pilot amplitude, payload
+or grid-search parameters in this
+first sweep. If lowering DELTA does
+not remove the pattern while
+preserving recovery, consider
+alternative distortion-aware QIM
+coefficient embedding, with new
+format/versioning and a new
+held-out validation set.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
