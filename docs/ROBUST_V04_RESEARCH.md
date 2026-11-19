@@ -2560,6 +2560,71 @@ a more selective, perceptually constrained
 amplitude rule. A later untouched image set and
 JPEG+resize channel must validate any change.
 
+### Decoder-only QIM synchronization hypothesis: predeclared rank probe
+
+After the 11-cover adaptive-vs-fixed experiment, we freeze the
+existing Fourier candidate generator (variants
+`0.38:0,0.38:5,0.48:20`, stages `4:10,16:10`,
+160 sizes per stage, cross-variant pixel-size deduplication)
+and the **adaptive** encoder. The new research-only tool
+`tools/robust_qim_sync_rank_probe.py` reranks only a
+predeclared prefix of those *same* safe candidates. It
+does not add candidates or change the codec.
+
+**Two independent decoder-only candidate scores:**
+
+- `lattice`: difference in mean
+  `cos(2*pi*LL2/DELTA)` between the first
+  `32*REPEAT` seeded QIM positions and the next
+  equally sized, disjoint, non-payload-control
+  positions in the same LL2 coefficient permutation.
+  (On our 58-byte packet, both sets are within the
+  embedded payload, so **this second set is NOT
+  an unembedded negative control**. It is a
+  *matched position contrast*, not a formal
+  QIM-vs-non-QIM control. To obtain an unembedded
+  control, one must use a packet-length-independent
+  position selection that excludes the embedded
+  positions, which is impossible without knowledge
+  of the actual packet length.)
+- `header`: centred Pearson correlation of
+  `cos(pi*LL2/DELTA)` at the first `32*REPEAT`
+  seeded positions with the publicly known four
+  `CLR1` header bytes repeated `REPEAT` times.
+  The centring prevents a constant white cover
+  from scoring artificially high merely because
+  the header contains more zero than one bits.
+  The length and payload are **not** used to
+  generate or rank candidates.
+
+The tool also measures predeclared wrong-seed
+(`SEED+1`) and wrong-delta (`DELTA*1.17`)
+header controls. The **known original size is
+used only after scoring** to calculate exact
+and LL2-grid candidate ranks. An LL2-grid match
+is **not** a recovered packet. `--blind`
+enables three independent equal-decoder-call-budget
+arms (baseline Fourier order, header rank,
+lattice rank), each over the identical candidate
+pool; rank calculation time is reported separately.
+The tool does not run actual blind decoding by
+default. CSVs refuse overwrite.
+
+**First targeted experiment:** 4 covers
+(`kulutus-web-anal1.png`,
+`kulutus-web-vika.png`,
+`appfootprint-main.png`,
+`P1000450.JPG`), nominal strengths .12/.18,
+scale .5, `DELTA=38`, `REPEAT=13`,
+first 240 frozen candidates. This is a
+*development diagnostic*, not an independent
+test set. Inspect true-grid rank and both
+negative controls before trying `--blind`
+with a predeclared 40-call budget per arm.
+Do not treat a better true-grid rank as
+proof of better payload recovery, and include
+scoring CPU time in end-to-end cost.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
