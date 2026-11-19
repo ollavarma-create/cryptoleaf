@@ -153,12 +153,15 @@ def test_probe_decodes_blind_before_oracle_and_records_size(
 
     monkeypatch.setattr(multi, "decode_multimask", blind)
     monkeypatch.setattr(multi, "decode_known_at_size", oracle)
+    monkeypatch.setattr(robust, "ADAPTIVE_PILOT", False)
     rows = multi.probe(
         source, b"expected", strengths=[0.18], scales=[0.75],
     )
     assert events == ["blind", "oracle"]
     assert len(rows) == 1
     row = rows[0]
+    assert row["adaptive_pilot"] is False
+    assert row["effective_pilot_strength"] == pytest.approx(0.18)
     assert row["blind_status"] == "PASS"
     assert row["blind_same_ll2_shape"] is True
     assert row["blind_width_error_px"] == 0
