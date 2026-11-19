@@ -3181,6 +3181,70 @@ images, including unmarked controls, before
 claiming general robustness. No production
 code changes.
 
+### Actual blind packet recovery after unknown 62% resize: 4/4
+
+User-supplied `robust-v04-qim-blind-grid-062-decode-01.csv`:
+the same four **development** covers as the preceding
+rank-only 62% experiment, nominal pilot strength .12,
+adaptive pilot, `DELTA=38`, `REPEAT=13`,
+`--min-scale .5 --height-jitter 2 --top-grids 5`,
+`--blind --decode-budget 40`.
+All four are `status=OK`, `oracle=PASS`,
+**`blind_status=PASS` with exactly one decoder
+attempt**, and the independently decoded pixel
+size exactly equals the encoded original size
+in each case. The blind search uses only received
+dimensions, aspect-ratio and scale-range
+assumptions, and the public CLR1 header;
+the original size is consulted only after ranking
+for diagnostics and the separate oracle check.
+
+| Cover | Grids scored | Coarse true-grid rank | Refined exact-size rank | Decoded size | Coarse s | Refine s | Decode s | End-to-end s |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| `kulutus-web-anal1.png` | 285 | 1 | 1 | 1280×577 | 4.973 | 1.230 | .039 | 6.243412 |
+| `kulutus-web-vika.png` | 357 | 1 | 1 | 1193×976 | 13.128 | 1.008 | .045 | 14.182105 |
+| `appfootprint-main.png` | 325 | 1 | 1 | 1198×677 | 6.659 | .845 | .026 | 7.531052 |
+| `P1000450.JPG` | 305 | 1 | 1 | 1280×960 | 8.850 | 1.447 | .050 | 10.348377 |
+
+Across four cases: bank generation **.004946 s**,
+coarse scoring **33.610 s**, within-grid
+refinement **4.530 s**, and actual decoder
+**.160 s**; total **38.304946 s**, mean
+**9.576237 s/case**. Coarse scoring takes
+**87.74%** of total time. These are separate
+sequential timing runs, not controlled CPU
+benchmarks. Relative to the preceding
+rank-only run (mean ~9.111 s), the measured
+search time changed slightly with run
+conditions; this is not a method regression.
+
+This is the **first actual blind payload recovery**
+at an **off-prior** 62% resize factor in the
+QIM-grid experiment. It does **not** establish
+scale-invariance: the candidate search explicitly
+assumes isotropic resizing, preserved aspect
+ratio, `min_scale=.5`, and the codec's
+`MAX_LONGEST` cap. These four covers are
+reused development cases, not independent
+validation. No unmarked-image false-positive
+controls were included in this CSV.
+
+**Next predeclared validation:** freeze the
+current algorithm and parameters; run an
+independent cover set at multiple off-prior
+scales, including .55, .68, .83, using the
+same `--blind --decode-budget 40` setting.
+Record oracle vs blind PASS separately,
+candidate recall, grid shortlist rank,
+decoder attempts and full time. Also
+measure unmarked covers under the same
+received-size conditions, checking both
+max CLR1 scores and whether *any*
+CRC-validated packet is accepted.
+Only after these tests should coarse
+scoring speed be optimized. No production
+code changes.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
