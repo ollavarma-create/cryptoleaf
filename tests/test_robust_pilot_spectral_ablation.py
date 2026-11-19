@@ -50,7 +50,7 @@ def test_ll2_grid_matches_real_wrong_size_successes():
 def test_grid_rank_skips_unsafe_candidates_and_never_uses_oracle_hint():
     candidates = [
         (1500, 960),  # unsafe, skipped
-        (1280, 958),   # different LL2 grid
+        (1280, 956),   # different LL2 grid
         (1280, 959),   # same LL2 grid as (1280, 960)
         (1280, 960),
     ]
