@@ -68,13 +68,13 @@ def save_samples(
     directory: Path, source: Path,
     reference: Image.Image, marked: Image.Image,
     received_unmarked: Image.Image, received_marked: Image.Image,
-    scale: float, quality: int,
+    scale: float, quality: int, strength: float,
 ) -> None:
     """Local-only visual samples; input images are never overwritten."""
     directory.mkdir(parents=True, exist_ok=True)
     stem = source.stem
     suffix = hashlib.sha256(source.read_bytes()).hexdigest()[:8]
-    label = f"{stem}-{suffix}"
+    label = f"{stem}-{suffix}-p{strength:g}"
     _save_pair(
         reference, marked, directory / f"{label}-native-pair.png"
     )
@@ -176,7 +176,7 @@ def probe(
                         save_samples(
                             sample_dir, source, reference, marked,
                             received_unmarked, received_marked,
-                            scale, quality,
+                            scale, quality, strength,
                         )
                         sample_saved = True
     return rows
@@ -209,10 +209,11 @@ def main() -> None:
             raise ValueError("DELTA must be 8..128")
         if not 1 <= args.repeat <= 31 or args.repeat % 2 == 0:
             raise ValueError("REPEAT must be odd and 1..31")
-        if args.sample_scale not in scales:
-            raise ValueError("--sample-scale must occur in --scales")
-        if args.sample_quality not in qualities:
-            raise ValueError("--sample-quality must occur in --jpeg-qualities")
+        if args.sample_dir is not None:
+            if args.sample_scale not in scales:
+                raise ValueError("--sample-scale must occur in --scales")
+            if args.sample_quality not in qualities:
+                raise ValueError("--sample-quality must occur in --jpeg-qualities")
         if args.csv.exists():
             raise ValueError("Refusing to overwrite CSV: " + str(args.csv))
         sources = image_paths(args.directory, args.name or None)
