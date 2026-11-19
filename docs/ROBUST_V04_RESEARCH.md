@@ -3002,6 +3002,80 @@ coarse-to-fine blind candidate generator
 on independent covers next. End-to-end
 latency and negative controls remain required.
 
+### Local QIM landscape at 62% and 75% resize: 16/16 oracle-centred peaks
+
+User-supplied `robust-v04-qim-local-landscape-01.csv`:
+four selected covers × two nominal strengths (.12/.18)
+× two resize factors (.62/.75) × 81 pixel-size offsets
+(±4 in both dimensions): **1,296 CSV rows**.
+**1,008** sizes scored; **288** marked
+`SKIP:unsafe_size` because of decoder size limits.
+The 16 unique condition-level oracle checks PASS,
+and the known exact original pixel size has
+**strict rank 1 in all 16 oracle-centred windows**.
+These are **not 1,296 independent oracle successes**.
+All four source images are development covers.
+
+CLR1 header score distributions:
+| Candidate relative to known original | Scored sizes | Median | Range |
+| --- | ---: | ---: | --- |
+| Exact original | 16 | **.9215** | .7217–.9710 |
+| Wrong pixel size, same LL2 shape | 240 | **.6544** | .1385–.9293 |
+| Different LL2 shape | 752 | **−.0095** | −.1239–.1291 |
+
+In **every one of 16 conditions**, even the
+*lowest* score among same-LL2-grid sizes exceeds
+the *highest* score from all tested neighboring
+different-grid sizes. The smallest such
+within-condition separation is ~**.057** (photo,
+62% scale). The exact-size vs best wrong-size
+margin is smaller: **.0014–.217**; Kulutus-Web
+`vika` at 62% is especially close (.0014/.0028).
+Thus the soft CLR1 score has a broad local
+**within-grid basin** but a sharp boundary
+when LL2 dimensions change and the seeded
+coefficient permutation changes. A naive
+continuous hill climb across grid boundaries
+is not supported; searching LL2 grid shapes
+and refining pixel dimensions *within a
+promising grid* is a better motivated
+mechanism to test. These local windows
+are centred on the known original dimensions,
+so their perfect rank **does not demonstrate
+blind unknown-scale discovery**.
+
+Mean scoring time for 1,008 safe sizes:
+**.0343 s/size**; total **34.569 s**
+across 16 condition-level windows (mean
+**2.161 s/condition**). Wrong-seed header
+scores at the exact size range −.0462…+.0652.
+No independent unmarked controls were
+included in this local-window CSV.
+
+**Predeclared next experiment:** a blind
+aspect-ratio-constrained sweep of all plausible
+pixel widths from the received width up to
+`min(MAX_LONGEST, received_width/.5)`,
+and ±2 height pixels around the received
+aspect ratio. Group candidate pixel sizes by
+LL2 shape, score **one representative per
+shape**, shortlist the top five grid shapes,
+then score/refine all candidates within those
+five grids. Generate/rank sizes **only from
+received dimensions**, with no true size,
+resize factor, oracle or expected payload
+used for candidate selection. The known
+original is used only to report rank and
+for an independent post-ranking oracle.
+This makes the **50% minimum-scale bound
+and preserved-aspect-ratio assumption**
+explicit. Test four development covers at
+62% resize and one pilot strength first,
+then independently held-out images and
+unknown/cropped/anisotropic resizes.
+Measure full coarse+refinement+decode
+latency before considering production.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
