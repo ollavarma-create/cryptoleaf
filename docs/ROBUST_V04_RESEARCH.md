@@ -2881,11 +2881,26 @@ unranked exhaustive decoding would fail.
 QIM's real benefit here is **candidate
 discrimination**, not end-to-end speed.
 
-**Next discriminating experiment:** run a
-true baseline-only exhaustive bank decode
-without QIM scoring and measure candidate
-generation + decoding separately; compare
-against QIM total time. Then evaluate
+**Next discriminating experiment:** the research tool
+now supports `--baseline-only --blind
+--decode-budget 200`, which runs an exhaustive
+bank decode **without QIM scoring** and reports
+`candidate_generation_seconds` separately from
+`baseline_blind_seconds`. In this mode
+`scoring_seconds` is null, and QIM columns
+are intentionally unpopulated. In the normal
+mode `scoring_seconds` retains its historical
+meaning (bank generation **plus** QIM scoring),
+while the new generation-only field is a
+subset of that time: **do not add them together**.
+Compare baseline-only total
+(`candidate_generation_seconds + baseline_blind_seconds`)
+with the previously measured QIM total
+(`scoring_seconds + header_blind_seconds`).
+Use the default bank order so the first
+true-size candidate is at rank 126–130;
+this tests exhaustive decoding rather than
+the favorable 2×-first prior. Then evaluate
 off-prior resize factors on untouched covers,
 with a predeclared size-search strategy.
 Avoid promoting the QIM method to production
