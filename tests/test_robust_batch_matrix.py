@@ -61,6 +61,10 @@ def test_valid_cover_smoke(monkeypatch, tmp_path):
     monkeypatch.setattr(
         matrix, "jpeg_roundtrip", lambda image, _quality: image
     )
+    monkeypatch.setattr(robust, "_feedback_embed", lambda image, _packet: image)
+    monkeypatch.setattr(
+        matrix, "decode_known_at_size", lambda _image, _size, _payload: "PASS"
+    )
     rows = matrix.run_image(
         source, packet, payload, [0.0], [85], [0.75]
     )
@@ -68,6 +72,4 @@ def test_valid_cover_smoke(monkeypatch, tmp_path):
     assert rows[0]["status"] == "OK"
     assert rows[0]["png_oracle"] == "PASS"
     assert rows[0]["jpeg85_oracle"] == "PASS"
-    assert rows[0]["scale_0.75_oracle"] in (
-        "PASS", "FAIL:ValueError"
-    )
+    assert rows[0]["scale_0.75_oracle"] == "PASS"
