@@ -488,6 +488,61 @@ discovery. A candidate passing these two images is not a universal
 result. The blind decoder will also need a nonzero pilot and a
 parameter-discovery or version-signaling strategy.
 
+### Narrow two-axis sweep: a lower-distortion shared candidate
+
+The user supplied `robust-v04-dwt-pairs-02.csv` with **26 OK
+encodes** (13 parameter pairs × two covers). There were **81/104
+successful oracle-size decodes**: PNG 24/26, JPEG q60 23/26, 75%
+resize 23/26, 50% resize 11/26. These are separate transformations,
+not a combined resize+JPEG test.
+
+**DELTA=38, REPEAT=13, pilot=0** passes all four transformations
+on both previously failing covers (8/8). So does DELTA=64/REPEAT=9,
+but 38/13 has better PSNR, SSIM and worst local luminance distortion:
+
+| Cover | PSNR 38/13 vs 64/9 | SSIM 38/13 vs 64/9 | Worst local luma MAE 38/13 vs 64/9 | RS8 codeword byte errors after 50% |
+| --- | --- | --- | --- | --- |
+| appfootprint-main.png | 39.4615 vs 37.5162 dB | 0.982019 vs 0.971494 | 3.9880 vs 8.3684 | 0 vs 0 |
+| Anna Maria Liikanen.jpg | 43.6895 vs 40.9657 dB | 0.990911 vs 0.987796 | 2.9961 vs 5.2083 | 1 vs 0 |
+
+Compared to the original 32/9 baseline, 38/13 still costs
+**1.0922 dB** PSNR on AppFootprint and **3.4058 dB** on Anna Maria.
+The new setting uses **13/9 ≈ 1.44×** as many DWT coefficients for the
+same packet; capacity constraints on small covers must be measured.
+At 50% resize Anna Maria has two majority-vote bit errors in one
+codeword byte, recovered by RS8+CRC32; AppFootprint has zero.
+
+Other paired candidates do not pass both covers at 50%:
+38/11 passes AppFootprint but fails Anna Maria (six codeword bytes
+and two magic bits), while 40/11 passes Anna Maria but fails
+AppFootprint (nine codeword bytes). The successful 38/13 point is
+therefore a discrete empirical result, not proof of monotonicity.
+
+**Next gate: whole-corpus validation**, without modifying production
+constants or adding the pilot yet:
+
+```bash
+git pull --ff-only
+python -m pytest tests/test_robust_dwt_parameter_sweep.py -q
+python tools/robust_dwt_parameter_sweep.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --all-covers \
+  --pairs 32:9,38:13,64:9 \
+  --csv results/robust-v04-dwt-fullcover-01.csv
+```
+
+This is **30 covers × 3 pairs = 90 encodes**, with four independent
+oracle-size transforms per successful encode (up to 360 checks).
+Check capacity skips, image-quality distributions, all four decode
+statuses, and whether 38/13 introduces new failures elsewhere.
+The zero-pilot sweep cannot test blind size discovery.
+
+If 38/13 passes the corpus with acceptable quality, the next phase
+must reintroduce a *nonzero* Fourier pilot, distinguish oracle
+recoverability from blind synchronization, and solve decoder
+parameter discovery. Changing DELTA/REPEAT is **not compatible**
+with the current CLR1 format unless signaled or searched safely.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
