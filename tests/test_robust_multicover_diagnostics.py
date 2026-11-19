@@ -39,7 +39,7 @@ def test_header_error_counts_and_length():
 
 def test_magic_error_distinct_from_length_error():
     original = b"CLR1" + (52).to_bytes(2, "big")
-    corrupted = b"DLR1" + (52).to_bytes(2, "big")
+    corrupted = b"BLR1" + (52).to_bytes(2, "big")
     report = header_errors(corrupted, original)
     assert report["magic_bit_errors"] == 1
     assert report["length_bit_errors"] == 0
