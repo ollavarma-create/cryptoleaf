@@ -1668,6 +1668,145 @@ codec on these diagnostics alone**: validate
 new blind recovery and visual quality on
 held-out covers first.
 
+### Four-arm Fourier pilot visibility results (20/20 completed)
+
+The user supplied
+`robust-v04-pilot-signal-four-arm-01.csv`:
+**20 rows**, all `status=OK`, covering five
+covers × pilot strengths .12/.18 × resizes
+75%/50%. Each row compares the same received
+geometry for **cover-only, DWT-only, pilot-only,
+and pilot+DWT**. DWT uses DELTA38 / REPEAT13.
+
+All **20/20 pilot+DWT** arms have a positive
+true-scale normalized correlation *lift*
+relative to DWT-only. This is **not**
+equivalent to successful pilot detection or
+blind decoding. Some positive lifts are
+tiny relative to competing cover peaks.
+
+| Cover and resize | Pilot | Lift: pilot+DWT minus DWT-only | True-scale local peak rank, pilot+DWT | DWT effect: pilot+DWT minus pilot-only |
+| --- | ---: | ---: | ---: | ---: |
+| **Aarne 50%** | .12 | **+.0132** | **22** | +.0033 |
+| Aarne 50% | .18 | +.0170 | 22 | +.0033 |
+| **CryptoLeaf screenshot 75%** | .12 | +.0931 | **29** | **−.0648** |
+| Screenshot 75% | .18 | +.1458 | **17** | **−.0753** |
+| **Screenshot 50%** | .12 | **+.0055** | **no peak within ±.01** | −.0286 |
+| Screenshot 50% | .18 | +.0374 | **no peak within ±.01** | −.0521 |
+| **Anna Maria 50%** | .12 | +.3151 | **9** | −.0044 |
+| Anna Maria 50% | .18 | +.3913 | **6** | −.0628 |
+| **P1000450 50%** | .12 | +.3016 | **1** | +.0095 |
+| P1000450 50% | .18 | +.3926 | **1** | +.0047 |
+
+**Interpretation by failure mechanism:**
+
+- **Aarne 50%:** pilot signal is barely
+  discriminable from natural cover spectrum
+  (lift .013–.017), despite almost full
+  nominal pilot amplitude (effective
+  .11895/.17843). DWT is *not* the primary
+  cause: its effect is slightly positive.
+  Simply increasing peak count may be
+  ineffective; true-scale local peaks rank 22.
+- **CryptoLeaf screenshot:** adaptive
+  attenuation sets effective pilot to
+  **.07154** (nominal .12) or **.10731**
+  (nominal .18), approximately **59.6%**
+  of requested amplitude. At 75%,
+  pilot-only ranks **14/11**, while
+  pilot+DWT ranks **29/17**: DWT
+  materially degrades visibility. At
+  50%, neither pilot-only nor pilot+DWT
+  produces a local peak within ±.01 of
+  true scale; nearest local peak is .012
+  away. DWT contributes additional
+  degradation, but cannot be the only
+  cause because pilot-only already fails
+  the local-peak criterion.
+- **Anna Maria 50% pilot .12:** strong
+  pilot correlation lift **+.3151** and
+  true-scale local peak rank **9**.
+  The earlier 2-stage blind search
+  nevertheless failed. This case is
+  more suggestive of candidate scheduling
+  / geometry / scale-estimate precision
+  than of a wholly missing pilot.
+- **P1000450:** true-scale peak ranks
+  **1 in all four pilot+DWT tests**,
+  and pilot lifts range +.302 to +.713.
+  This is a useful positive control.
+- **AppFootprint:** true-scale peak ranks
+  1–4 in the four pilot+DWT tests;
+  also a positive control.
+
+Across all 20 rows, DWT changes the
+true-scale score positively in **12** and
+negatively in **8** cases. Thus "DWT
+destroys the Fourier pilot" is **not**
+a general explanation. The score is
+normalized correlation, not linear
+signal amplitude; a positive lift is
+not proof of reliable scale estimation.
+
+**Possible profile cutoff issue to isolate
+later:** pilot ring radii span .055–.195
+cycles/pixel. At exactly 50% resize,
+outer radii appear near .39 cycles/pixel,
+while the default radial detector profile
+stops at .38; `np.interp` clamps
+out-of-range frequencies. This can
+degrade matched detection, but an
+earlier .48-profile variant did not
+rescue the measured hard-case LL2
+coverage. It remains a hypothesis,
+not an established primary cause.
+
+**Next controlled amplitude experiment:**
+the research-only
+`tools/robust_pilot_adaptation_probe.py`
+compares the existing **adaptive**
+pilot amplitude against a **fixed**
+amplitude using the same cover, DWT
+payload, received resize, two-stage
+blind search and oracle. It records
+PSNR/SSIM, actual blind PASS and
+attempts, true-scale peak rank and
+four-arm pilot lift. The adaptive
+setting is restored after each test;
+no production code is changed.
+
+```bash
+git pull --ff-only
+python -m pytest \
+  tests/test_robust_pilot_adaptation_probe.py \
+  tests/test_robust_pilot_signal_probe.py \
+  tests/test_robust_pilot_cascade_probe.py -q
+
+# 8 paired searches for the most difficult screenshot:
+python tools/robust_pilot_adaptation_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name cryptoleaf-robust.png \
+  --pilot-strengths 0.12,0.18 \
+  --scales 0.75,0.5 \
+  --modes adaptive,fixed \
+  --csv results/robust-v04-pilot-adaptation-screenshot-01.csv
+```
+
+Expected **8 rows** (one screenshot × two
+amplitude modes × two strengths × two
+resizes). **Do not select fixed amplitude
+merely because it raises correlation**:
+it may visibly distort flat UI regions.
+Only a paired increase in actual blind
+recoveries with acceptable marked-image
+PSNR/SSIM and visual inspection can
+justify further exploration. If fixed
+amplitude still fails, prioritize a
+new pilot detector or synchronization
+signal over further strength increases.
+Aarne 50% requires separate research:
+its adaptive attenuation is negligible.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
