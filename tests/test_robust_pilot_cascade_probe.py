@@ -10,7 +10,10 @@ from tools import robust_pilot_cascade_probe as cascade
 
 
 def test_stage_parser_accepts_defaults_and_rejects_invalid():
-    assert cascade.parse_stages("4:10,4:50,16:10") == cascade.DEFAULT_STAGES
+    assert cascade.parse_stages("4:10,16:10") == cascade.DEFAULT_STAGES
+    assert cascade.parse_stages("4:10,4:50,16:10") == (
+        (4, 10), (4, 50), (16, 10)
+    )
     assert cascade.parse_stages("8:0") == ((8, 0),)
     for invalid in ("", "4", "0:10", "65:10", "4:-1",
                     "4:10,4:10", "foo:10", "4:10,"):
