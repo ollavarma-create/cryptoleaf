@@ -2031,6 +2031,130 @@ sub-grid resampling offsets. A broader
 candidate budget alone should not
 be presumed sufficient.
 
+### First confirmed screenshot blind recoveries with angular masks (4/4)
+
+The user supplied two actual blind-decoding CSVs:
+`robust-v04-angular-blind-screenshot-75-01.csv`
+and `robust-v04-angular-blind-screenshot-50-01.csv`.
+Together they contain **four completed rows**,
+all `oracle=PASS`, all `status=OK`,
+and **all four `blind_status=PASS`**. The
+unchanged marked screenshot is 720×697,
+pilot strength .18 (adaptive effective
+strength **.107312**), DWT DELTA38/REPEAT13.
+Only the Fourier *receiver* detector is
+changed. This is the first actual blind
+recovery of this hard screenshot in the
+v0.4 experiments.
+
+| Received resize | Mask | Profile max freq | First correct LL2 rank | Actual safe decoder attempts | Decoded size | Blind |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| 75%, received 540×523 | 5° | .38 | 168 | **168** | **720×697** | **PASS** |
+| 75% | 5° | .48 | 167 | **167** | **720×697** | **PASS** |
+| 50%, received 360×348 | 20° | .38 | 175 | **175** | **719×697** | **PASS** |
+| 50% | 20° | .48 | 104 | **104** | **719×697** | **PASS** |
+
+The 719-pixel decoded width at 50%
+has the same two-level Haar LL2 grid
+as the true 720-pixel width; in these
+actual tests, the decoded payload
+matches the expected bytes. A matching
+LL2 grid alone would not have sufficed
+as proof.
+
+**Critical research limitation:** the
+5° detector was selected for the 75%
+test and the 20° detector for the 50%
+test *after* examining a known-scale
+rank-only sweep on this screenshot.
+Therefore **4/4 is a targeted,
+post-hoc detector evaluation**, not
+evidence that an operational blind
+receiver can choose the correct mask
+without knowing the scale or cover.
+The two successful received sizes are
+not representative of unseen covers,
+JPEG recompression, cropping, or
+combined transforms. The 50% pilot
+lift against DWT-only is small
+(+.022813 / +.015175), and its
+negative control also has a
+true-scale peak; do not claim robust
+pilot-specific detection from that
+comparison alone.
+
+**Next honest blind experiment:**
+the new research-only
+`tools/robust_pilot_multimask_probe.py`
+uses a **frozen, cover- and
+scale-independent detector sequence**:
+`0.38:0,0.38:5,0.48:20`. Each variant
+uses the same 4:10,16:10 search.
+The original unmasked detector runs
+first, preserving easy-case behavior;
+the 5° and 20° variants are attempted
+only if the earlier masks fail.
+Pixel-size candidates are deduplicated
+globally across masks. No original
+size, known scale, cover-only negative
+control or previous outcome enters
+the detector or candidate generation.
+The oracle is run **after** the blind
+search and used only for reporting.
+
+This is a larger search: up to
+**3 masks × 2 stages × 160 generated
+sizes = 960** before deduplication,
+compared with **320** for the prior
+two-stage baseline. Compare actual
+safe decoder attempts and runtime
+as well as PASS/FAIL, and avoid
+equal-budget claims. Because the
+three masks were chosen using this
+same five-cover exploratory set,
+performance on these covers is
+**not independent validation**.
+
+```bash
+git pull --ff-only
+python -m pytest \
+  tests/test_robust_pilot_multimask_probe.py \
+  tests/test_robust_pilot_angular_probe.py \
+  tests/test_robust_pilot_cascade_probe.py -q
+
+# Full 20-case paired comparison against the existing
+# robust-v04-blind-cascade-two-stage-01.csv:
+python tools/robust_pilot_multimask_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --pilot-strengths 0.12,0.18 \
+  --scales 0.75,0.5 \
+  --variants 0.38:0,0.38:5,0.48:20 \
+  --csv results/robust-v04-blind-multimask-01.csv
+```
+
+Expect **20 rows**, one per cover,
+pilot strength and resize. The prior
+unmasked cascade recovered **13/20**.
+If the first detector reproduces its
+baseline and the additional masks
+recover the screenshot at .18,
+**15/20 is a plausible target**, not
+a measured result. Pilot .12 on
+the screenshot and the other three
+unrecovered cover/scale cases remain
+unknown. Record which detector and
+stage succeeded, the number of safe
+decoder attempts, and recovered
+dimensions.
+
+Next, freeze the algorithm and test
+**previously unseen covers** and
+combined JPEG+resize transformations
+before any production integration.
+Do not merge research into the
+production codec based on these
+exploratory tests.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
