@@ -28,6 +28,36 @@ def test_extended_priority50_deduplicates_and_keeps_strongest_first(monkeypatch)
     assert len(candidates) == len(set(candidates))
 
 
+def test_extended_blind_decodes_only_from_candidates(monkeypatch):
+    image = Image.new("RGB", (160, 120))
+    payload = b"correct payload"
+    attempted = []
+
+    def fake_decode(_image, size):
+        attempted.append(size)
+        if size == (320, 240):
+            return payload
+        raise ValueError("No valid packet")
+
+    monkeypatch.setattr(robust, "decode_at_size", fake_decode)
+    status, attempts, size = sync.decode_from_candidates(
+        image, [(200, 160), (320, 240), (400, 300)], payload
+    )
+    assert (status, attempts, size) == ("PASS", 2, "320x240")
+    assert attempted == [(200, 160), (320, 240)]
+
+
+def test_extended_blind_reports_failure_without_oracle_fallback(monkeypatch):
+    monkeypatch.setattr(
+        robust, "decode_at_size",
+        lambda _image, _size: (_ for _ in ()).throw(ValueError("not found")),
+    )
+    status, attempts, size = sync.decode_from_candidates(
+        Image.new("RGB", (160, 120)), [(320, 240), (400, 300)], b"data"
+    )
+    assert (status, attempts, size) == ("FAIL:not_recovered", 2, None)
+
+
 def test_scale_and_pilot_parsers():
     assert sync.parse_scales("0.75,0.5,0.75") == [0.75, 0.5]
     assert sync.parse_strengths("0,0.12,0.18,0") == [0, 0.12, 0.18]
@@ -86,6 +116,8 @@ def test_probe_separates_oracle_and_size_rank(monkeypatch, tmp_path):
     assert all(row["standard_true_size_rank"] is None for row in rows)
     assert all(row["extended_true_size_rank"] == 1 for row in rows)
     assert all(row["blind_status"] == "NOT_RUN" for row in rows)
+    assert all(row["extended_blind_status"] == "NOT_RUN" for row in rows)
+    assert all(row["extended_blind_attempts"] is None for row in rows)
     assert observed == [(38.0, 13), (38.0, 13)]
     assert (robust.DELTA, robust.REPEAT) == original
     assert set(rows[0]) == set(sync.columns())
