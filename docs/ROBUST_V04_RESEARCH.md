@@ -2575,18 +2575,16 @@ does not add candidates or change the codec.
 
 - `lattice`: difference in mean
   `cos(2*pi*LL2/DELTA)` between the first
-  `32*REPEAT` seeded QIM positions and the next
-  equally sized, disjoint, non-payload-control
-  positions in the same LL2 coefficient permutation.
-  (On our 58-byte packet, both sets are within the
-  embedded payload, so **this second set is NOT
-  an unembedded negative control**. It is a
-  *matched position contrast*, not a formal
-  QIM-vs-non-QIM control. To obtain an unembedded
-  control, one must use a packet-length-independent
-  position selection that excludes the embedded
-  positions, which is impossible without knowledge
-  of the actual packet length.)
+  `32*REPEAT` seeded QIM positions and the **last**
+  `32*REPEAT` positions in the seeded permutation.
+  This is a valid unembedded negative control **only
+  if** LL2 capacity exceeds the maximum legal CLR1
+  packet size, `(HEADER_BYTES+MAX_CODEWORD)*8*REPEAT`,
+  plus the control sample size. Otherwise the lattice
+  score is NaN and sorted last; `lattice_control_eligible_count`
+  reports how many candidate sizes qualify. This
+  conservative rule requires no known packet length
+  or expected payload.
 - `header`: centred Pearson correlation of
   `cos(pi*LL2/DELTA)` at the first `32*REPEAT`
   seeded positions with the publicly known four
