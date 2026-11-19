@@ -107,6 +107,7 @@ def test_probe_returns_oracle_rank_only_with_negative_control(
     assert len(rows) == 2
     for row in rows:
         assert row["status"] == "OK"
+        assert row["adaptive_pilot"] is robust.ADAPTIVE_PILOT
         assert row["oracle"] == "PASS"
         assert row["blind_status"] == "NOT_RUN"
         assert row["blind_attempts"] is None
