@@ -177,23 +177,34 @@ def decode_at_size(image: Image.Image, size: tuple[int, int]) -> bytes:
     # the complete packet; the prefix is identical.
     positions = np.random.default_rng(SEED).permutation(ll.size)
     header = _read_from_ll(ll, HEADER_BYTES, positions)
-    if header[:4] != b'CLR1':
+    # The 4-byte magic and 2-byte length are outside RS8 protection.
+    # Recover at most ONE magic bit only when the observed prefix is already
+    # one bit away from CLR1. Random images almost always fail this check
+    # immediately; successful recovery still requires RS8 + CRC32 validation.
+    magic = b'CLR1'
+    magic_damaged = header[:4] != magic
+    if magic_damaged and sum(
+        (observed ^ expected).bit_count()
+        for observed, expected in zip(header[:4], magic)
+    ) != 1:
         raise ValueError('Invalid CLR1 header')
     length = int.from_bytes(header[4:6], 'big')
-    # Preserve the original fast path and CLR1 wire format. RS8 protects only
-    # the codeword, not the 16-bit length. A single damaged length bit can
-    # otherwise make an intact/correctable packet unreadable after resizing.
+    # Preserve the original fast path and CLR1 wire format. Correcting the
+    # magic prefix is only a candidate until unpack() validates the packet.
     if 12 <= length <= MAX_CODEWORD:
         try:
-            return unpack(_read_from_ll(ll, HEADER_BYTES + length, positions))
+            received = _read_from_ll(ll, HEADER_BYTES + length, positions)
+            if magic_damaged:
+                received = magic + received[4:]
+            return unpack(received)
         except ValueError as exc:
             original_error = exc
     else:
         original_error = ValueError('Invalid CLR1 length')
 
     # Bounded recovery: try one flipped length bit, but accept a candidate
-    # ONLY after RS8 and CRC32 validate. The magic must already be intact.
-    # No DWT recomputation, no changes to the encoder or stored packet.
+    # ONLY after RS8 and CRC32 validate. A single magic-bit repair may also
+    # be applied to the same candidate. No DWT recomputation, no wire changes.
     for bit in range(16):
         corrected_length = length ^ (1 << bit)
         if not 12 <= corrected_length <= MAX_CODEWORD:
@@ -202,7 +213,7 @@ def decode_at_size(image: Image.Image, size: tuple[int, int]) -> bytes:
             continue
         try:
             received = _read_from_ll(ll, HEADER_BYTES + corrected_length, positions)
-            corrected = header[:4] + corrected_length.to_bytes(2, 'big') + received[HEADER_BYTES:]
+            corrected = magic + corrected_length.to_bytes(2, 'big') + received[HEADER_BYTES:]
             return unpack(corrected)
         except ValueError:
             continue
