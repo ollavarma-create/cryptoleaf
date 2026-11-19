@@ -3076,6 +3076,46 @@ unknown/cropped/anisotropic resizes.
 Measure full coarse+refinement+decode
 latency before considering production.
 
+### Blind LL2-grid sweep: research implementation and first run
+
+`tools/robust_qim_blind_grid_sweep.py` implements
+the above predeclared blind geometry search.
+`blind_grid_bank(received_size, min_scale=.5,
+height_jitter=2)` enumerates all safe pixel
+sizes on a preserved-aspect-ratio strip;
+`blind_rank` has **no original_size parameter**.
+The bank is grouped by LL2 grid shape,
+one deterministic central representative
+per grid is scored using the public CLR1
+header, the top five grids are shortlisted,
+and all sizes within those grids are
+rescored/ranked (cached representatives
+are not rescored). An optional `--blind`
+calls the actual decoder on the ranked
+shortlist. The oracle runs separately
+**after** all scoring/decoding.
+
+First run is deliberately **rank-only** on
+the four development covers, one strength
+(.12), and off-prior resize .62; `--min-scale
+.5 --height-jitter 2 --top-grids 5`.
+This is an explicit **uniform-resize and
+aspect-ratio preservation** assumption,
+not robustness to cropping, anisotropic
+resizing, or scales below 50%. Expected
+coarse search breadth is ~285–357 LL2
+grids per cover at .62, so this test is
+not expected to be fast. The main
+question is whether the true grid ranks
+within the top five **without** any
+oracle-centred candidate window.
+Measure coarse+refinement times and
+do not run the 40-attempt blind decoder
+until true-grid shortlist recall is known.
+Next test on independent covers and
+multiple off-prior scales; no production
+changes.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
