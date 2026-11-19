@@ -2960,6 +2960,48 @@ QIM early-stop checks, or another scale-invariant
 synchronization mechanism instead. Do not change
 production defaults based on these selected-cover results.
 
+### Predeclared local score landscape (oracle-assisted mechanism study)
+
+The new research-only
+`tools/robust_qim_local_landscape_probe.py`
+samples `(2*radius+1)^2` candidate pixel sizes
+in a neighborhood **centred on the known encoded
+size** and records the public CLR1-header score,
+wrong-seed and wrong-delta scores, QIM lattice
+contrast, matching LL2-grid indicator and per-size
+scoring time. It reports the exact true-size rank
+within the local window and the best competing
+wrong-size score. Unsafe candidates are explicitly
+reported as skipped, not silently discarded.
+
+**This is an oracle-assisted mechanism test, NOT
+a blind candidate search.** The encoded size is
+deliberately used to place the diagnostic window;
+it is never used inside `qim.score_size`. Oracle
+payload recovery is performed only *after* all
+candidate scores have been computed. Do not use
+its true-size rank as evidence of blind scale
+recovery. Production code and frozen Fourier
+candidate generation remain unchanged.
+
+First run: the same four development covers,
+pilot strengths .12/.18, resize factors
+`.62,.75`, `DELTA=38`, `REPEAT=13`,
+`--radius 4` (up to 81 sizes per condition).
+The .62 resize is **off the six generic scale
+priors**; .75 is an in-prior control.
+Compare the true-size score with its adjacent
+±1..4-pixel competitors and stratify by
+whether the LL2-grid shape is unchanged.
+If header correlation is a narrow peak or
+discontinuous across grid boundaries,
+simple hill-climbing in width/height is not
+justified. If the score remains informative
+over nearby wrong sizes, test a predeclared
+coarse-to-fine blind candidate generator
+on independent covers next. End-to-end
+latency and negative controls remain required.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
