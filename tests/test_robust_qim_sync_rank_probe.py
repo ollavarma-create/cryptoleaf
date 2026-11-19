@@ -24,6 +24,7 @@ def test_known_magic_soft_parity_recovers_seeded_header():
     assert result["header"] > 0.98
     assert result["lattice"] > 0.2
     assert result["wrong_seed_header"] < 0.35
+    assert result["wrong_delta_header"] < 0.35
     assert all(np.isfinite(v) for v in result.values())
 
 
@@ -161,3 +162,69 @@ def test_rank_only_does_not_decode(monkeypatch):
     assert result["header_grid_rank"] == 2
     assert result["header_blind_status"] == "NOT_RUN"
     assert result["header_blind_attempts"] is None
+
+
+
+def test_probe_csv_schema_and_blind_first_oracle_later(monkeypatch, tmp_path):
+    import csv
+    import io
+
+    source = tmp_path / "cover.png"
+    Image.fromarray(
+        np.random.default_rng(7).integers(
+            0, 255, size=(64, 80, 3), dtype=np.uint8
+        ), "RGB"
+    ).save(source)
+    monkeypatch.setattr(
+        robust, "_pilot_embed",
+        lambda image, strength: image.convert("YCbCr").convert("RGB"),
+    )
+    monkeypatch.setattr(
+        robust, "_feedback_embed", lambda image, packet: image
+    )
+    events = []
+
+    def fake_evaluate(received, original_size, payload, delta, repeat,
+                      max_ranked, blind_budget):
+        events.append("rank")
+        assert original_size == (80, 64)
+        assert received.size == (40, 32)
+        return {
+            "pool_total": 2, "scored_count": 2,
+            "lattice_control_eligible_count": 2,
+            "ranking_seconds": 0.1, "blind_budget": 0,
+            "baseline_grid_rank": 1, "header_grid_rank": 1,
+            "lattice_grid_rank": 1,
+            "wrong_seed_header_grid_rank": 2,
+            "wrong_delta_header_grid_rank": 2,
+            "baseline_exact_rank": 1, "header_exact_rank": 1,
+            "lattice_exact_rank": 1,
+            "header_score_at_first_true_grid": 0.5,
+            "lattice_score_at_first_true_grid": 0.4,
+            "wrong_seed_header_score_at_first_true_grid": 0.0,
+            "wrong_delta_header_score_at_first_true_grid": 0.0,
+            **{
+                f"{arm}_blind_{suffix}": None if suffix != "status" else "NOT_RUN"
+                for arm in ("baseline", "header", "lattice")
+                for suffix in ("status", "attempts", "decoded_size", "seconds")
+            },
+        }
+
+    def fake_oracle(received, size, payload):
+        events.append("oracle")
+        return "PASS"
+
+    monkeypatch.setattr(qim, "evaluate", fake_evaluate)
+    monkeypatch.setattr(qim, "decode_known_at_size", fake_oracle)
+    rows = qim.probe(
+        source, b"payload", strengths=[0.12], scales=[0.5]
+    )
+    assert events == ["rank", "oracle"]
+    assert len(rows) == 1
+    assert rows[0]["oracle"] == "PASS"
+    assert set(rows[0]) == set(qim.columns())
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=qim.columns())
+    writer.writeheader()
+    writer.writerow(rows[0])
+    assert "wrong_delta_header_score_at_first_true_grid" in buffer.getvalue()
