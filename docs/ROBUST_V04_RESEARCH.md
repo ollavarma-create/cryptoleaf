@@ -161,6 +161,56 @@ The second diagnostic run on **encoded images only** reported `length_repair=PAS
 - This fallback does not recover a damaged CLR1 magic or two or more corrupted length bits. It does not guarantee success for other covers, scales, crops or JPEG recompression.
 - Run unit tests and the oracle-scale test on the user's machine before considering the decoder change validated end-to-end.
 
+### Multi-cover validation plan (30 local PNG/JPEG files)
+
+The user assembled 30 diverse PNG/JPEG files in
+/home/jari/Pictures/0-4-mosaic-in. They include UI screenshots, smaller
+JPEGs and multi-megabyte camera JPEGs. Actual content and dimensions must be
+measured rather than inferred from filenames.
+
+Use tools/robust_batch_matrix.py to run the same deterministic packet and
+DWT settings across **all** covers at nominal pilot strengths 0, 0.12 and 0.18.
+Each marked image is tested via PNG-equivalent in-memory RGB, JPEG quality
+85/75/60 (4:4:4, subsampling=0), and Lanczos resize to 75%/50% followed
+by oracle-size decode. PSNR/SSIM and local distortion metrics are measured
+against the codec-preprocessed RGB reference (maximum dimension 1280).
+Small images that cannot hold the packet are recorded as SKIP, not
+silently omitted. Results are streamed into a new CSV file after each cover.
+
+**First, a three-image smoke test:**
+
+```bash
+python -m pytest tests/test_robust_batch_matrix.py -q
+python tools/robust_batch_matrix.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --name appfootprint-main.png \
+  --name P1000450.JPG \
+  --name AarneArmeijassa.jpg \
+  --csv results/robust-v04-multicover-smoke-01.csv \
+  --images-out /home/jari/Pictures/0-4-mosaic-out/multicover-preview-01
+```
+
+**Then all 30 images (CSV only by default):**
+
+```bash
+python tools/robust_batch_matrix.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --csv results/robust-v04-multicover-01.csv
+```
+
+The tool refuses to overwrite existing CSV files and nonempty image output
+directories. It never writes to the source directory. The input JPEGs are
+already lossy; JPEG q85/q75/q60 tests apply **additional compression after
+embedding**. Saving marked PNGs is optional to avoid creating dozens of
+large files. If interrupted, completed rows remain in the CSV; reruns need
+a new output filename.
+
+**Interpretation:** all scale results in this matrix are *oracle-size*,
+not blind. Even pilot strength 0 may pass when the true size is provided.
+Blind original-size estimation and pilot synchronization should be evaluated
+as a separate stage, based on this matrix's cover/quality failures and
+representative cases. A 5/5 result on one cover does not generalize.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
