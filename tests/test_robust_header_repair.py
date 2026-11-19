@@ -1,4 +1,4 @@
-"""Regression tests for backward-compatible CLR1 length-bit recovery.
+"""Regression tests for backward-compatible CLR1 magic/length-bit recovery.
 
 Synthetic LL2 coefficients isolate the decoder logic from image-specific
 Fourier/DWT distortion. Full resize robustness still needs user-side tests.
@@ -64,10 +64,41 @@ def test_repair_length_and_one_codeword_byte(encoded_ll):
     assert robust.decode_at_size(image, image.size) == payload
 
 
-def test_does_not_repair_corrupted_magic(encoded_ll):
+def test_repair_one_corrupted_magic_bit(encoded_ll):
+    image, payload, corrupt = encoded_ll
+    corrupt(0)
+    assert robust.decode_at_size(image, image.size) == payload
+
+
+def test_repair_magic_bit_and_two_codeword_bytes(encoded_ll):
+    image, payload, corrupt = encoded_ll
+    corrupt(0)
+    corrupt(48)
+    corrupt(56)
+    assert robust.decode_at_size(image, image.size) == payload
+
+
+def test_repair_one_magic_and_one_length_bit(encoded_ll):
+    image, payload, corrupt = encoded_ll
+    corrupt(0)
+    corrupt(36)
+    assert robust.decode_at_size(image, image.size) == payload
+
+
+def test_does_not_accept_two_corrupted_magic_bits(encoded_ll):
     image, _, corrupt = encoded_ll
     corrupt(0)
+    corrupt(1)
     with pytest.raises(ValueError, match="Invalid CLR1 header"):
+        robust.decode_at_size(image, image.size)
+
+
+def test_does_not_accept_magic_repair_with_five_bad_codeword_bytes(encoded_ll):
+    image, _, corrupt = encoded_ll
+    corrupt(0)
+    for index in (48, 56, 64, 72, 80):
+        corrupt(index)
+    with pytest.raises(ValueError):
         robust.decode_at_size(image, image.size)
 
 
