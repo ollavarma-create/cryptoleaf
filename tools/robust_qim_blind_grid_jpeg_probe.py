@@ -170,9 +170,14 @@ def probe(
                         "true_grid_shortlisted": marked_result["true_grid_shortlisted"],
                         "refined_exact_rank": marked_result["refined_exact_rank"],
                         "refined_true_score": marked_result["refined_true_score"],
-                        "coarse_max_header_score": (
-                            marked_result["coarse"][0][1]
-                            if "coarse" in marked_result else None
+                        "coarse_max_header_score": max(
+                            (
+                                value for value in (
+                                    marked_result["coarse_true_grid_score"],
+                                    marked_result["coarse_best_wrong_grid_score"],
+                                ) if value is not None
+                            ),
+                            default=None,
                         ),
                         "refined_max_header_score": marked_result["refined_best_score"],
                         "bank_seconds": marked_result["bank_seconds"],
