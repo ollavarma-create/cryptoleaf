@@ -3860,6 +3860,83 @@ coefficient embedding, with new
 format/versioning and a new
 held-out validation set.
 
+### Visual QIM delta-only sweep: 20 is the best tested visual setting (not yet decode-validated)
+
+User-supplied `robust-v04-ablation-d32-01.csv`,
+`robust-v04-ablation-d26-01.csv`, and
+`robust-v04-ablation-d20-01.csv`:
+**24 rows each**, six identical covers ×
+four ablation variants. Source hashes,
+reference dimensions, payload, nominal
+adaptive pilot strength .12, and
+`REPEAT=13` match across all three
+experiments. `PILOT_ONLY` metrics
+are exactly invariant across DELTA
+as expected. The user independently
+inspected the images and reports
+`PILOT_ONLY` visually clean and
+**DELTA 20 the best-looking** among
+the tested QIM variants. The user
+has not claimed that DELTA 20 is
+completely invisible.
+
+| Metric, mean of six distinct covers | DELTA 32 | DELTA 26 | DELTA 20 |
+| --- | ---: | ---: | ---: |
+| FULL PSNR (dB) | 38.1419 | 38.5818 | 38.6974 |
+| FULL 1% local luminance SSIM | .86217 | .89949 | **.93068** |
+| FULL changed pixels >8 RGB units (%) | 1.5668 | 1.1775 | **.6721** |
+| QIM_ONLY PSNR (dB) | 42.2792 | 43.4442 | **44.1095** |
+| QIM_ONLY 1% local luminance SSIM | .8679 | .9121 | **.9467** |
+| QIM_ONLY changed pixels >4 RGB units (%) | 4.4706 | 3.2017 | **1.8476** |
+| PILOT_ONLY 1% local luminance SSIM | .9837 | .9837 | .9837 |
+
+In **all six** covers, the `FULL`
+and `QIM_ONLY` 1% local SSIM improves
+monotonically from DELTA32 to 26 to 20.
+For `QIM_ONLY`, PSNR, >4 RGB pixel
+fraction, worst-tile luminance MAE,
+and flat/textured luminance MAE also
+improve monotonically on all six.
+FULL global PSNR is not strictly
+monotonic for every cover, but the
+FULL local SSIM p01 is. These are
+paired source-level comparisons,
+not 72 independent observations.
+
+The FULL fraction of pixels changed
+by >8 RGB-channel units falls by
+**57.1%** from DELTA32 to DELTA20,
+while FULL local SSIM p01 improves
+by **.06851** absolute. QIM_ONLY
+pixels changed >4 units fall by
+**58.7%**. This corroborates
+the QIM artifact mechanism but
+does not establish JPEG robustness,
+packet recovery, security, or a
+universal quality threshold.
+
+**Predeclared next gate:** with
+**no changes to search or codec
+implementation**, run the existing
+paired `robust_qim_blind_grid_jpeg_probe.py`
+at **DELTA=20**, `REPEAT=13`,
+pilot .12, six covers ×
+.55/.68/.83 resize × JPEG85/70
+4:2:0, `min_scale=.5`,
+`height_jitter=2`, `top_grids=5`,
+decode budget 40. Record all
+36 marked oracle outcomes,
+all 36 actual blind payload
+outcomes and all 36 matched
+unmarked controls. Compare with
+DELTA38 baseline (36/36).
+If DELTA20 degrades recovery,
+test DELTA26 with the same frozen
+protocol as a fidelity/robustness
+trade-off. Avoid choosing an
+unvalidated DELTA for production
+or modifying the encoder yet.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
