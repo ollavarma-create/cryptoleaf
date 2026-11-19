@@ -1339,6 +1339,103 @@ production codec change or blind recovery guarantee
 has been established for unseen covers, JPEG+resize
 combinations, cropping or unknown transformations.
 
+### Anna Maria 75% regression confirmed; staged blind search experiment
+
+The user supplied `robust-v04-blind-quota-anna-75-01.csv`:
+**four actual blind decodes** of the same encoded/received
+image, Anna Maria Liikanen, pilot .12, 75% resize,
+DELTA 38 / REPEAT 13, oracle PASS in every case.
+
+| Fourier peaks / first-peak quota | Blind result | Safe attempts | Recovered dimensions | First matching LL2 safe rank |
+| --- | --- | ---: | --- | ---: |
+| **4/10** | **PASS** | **38** | 1280×868 | 38 |
+| 4/50 | PASS | 72 | 1280×868 | 72 |
+| 16/10 | **FAIL** | 75 | — | — |
+| 16/50 | **FAIL** | 97 | — | — |
+
+True encoded size was **1280×867**; the
+successful one-pixel height mismatch retains the
+same LL2 coefficient grid. The actual-scale local
+correlation peak ranks **2**, so adding many
+other peaks displaced the correct-size candidate
+under the 160-candidate budget. The number of
+*safe* decoding attempts can be smaller than 160
+because oversized hypotheses are skipped.
+
+Rechecking the earlier 480-row quota matrix:
+**4/10 and 4/50 both have exactly the same 10/20
+nonzero-pilot LL2-hit cases** (not just equal totals).
+The mean first safe grid rank for the successful
+cases is **15.10** at 4/10 vs **25.90** at 4/50.
+This does not establish equal *actual blind* success
+on all 20 cases: different pixel dimensions sharing
+one LL2 grid can still decode differently.
+
+The **union** of 4/10, 4/50 and 16/10 LL2-hit cases
+is **13/20**. The three additions over four-peak
+search are Aarne 75% pilots .12 and .18, and Anna
+Maria 50% pilot .18; all three have separately
+demonstrated real blind recovery. The union does
+not mean one 160-candidate strategy achieves 13/20.
+
+A new **research-only** tool,
+`tools/robust_pilot_cascade_probe.py`, implements
+a fixed fallback order:
+
+1. **4 peaks / quota 10**, up to 160 candidate sizes.
+2. If no valid packet, **4 peaks / quota 50**, the
+   previous widened research baseline.
+3. If still no valid packet, **16 peaks / quota 10**
+   to recover additional weaker-scale peaks.
+
+The decoder stops on a packet matching the fixed
+payload and skips pixel-size candidates already
+tried in an earlier stage. It does **not** deduplicate
+by LL2 shape because resizing within a shape can
+change packet voting. All three stages use the
+same Fourier profile, peak search interval and
+marked pixels. Original dimensions are used only
+for the separate oracle and output diagnostics.
+The fallback increases the **maximum** budget
+from 160 to **480 candidate sizes before
+cross-stage deduplication**; this is a
+coverage/latency/memory tradeoff, **not** a
+fixed-budget superiority claim.
+
+```bash
+git pull --ff-only
+python -m pytest \
+  tests/test_robust_pilot_cascade_probe.py \
+  tests/test_robust_blind_sync_probe.py \
+  tests/test_robust_pilot_spectral_ablation.py -q
+
+# 20 distinct received-image conditions, actual blind search
+python tools/robust_pilot_cascade_probe.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --pilot-strengths 0.12,0.18 \
+  --scales 0.75,0.5 \
+  --csv results/robust-v04-blind-cascade-01.csv
+```
+
+Expected **20 rows**. Report **actual blind PASS
+count**, successful stage, cumulative safe attempts,
+stage-by-stage safe attempts, and actual decoded
+dimensions. Compare the results with the earlier
+10/20 baseline under its single-stage 160-candidate
+limit. If the cascade recovers 13/20, investigate
+how to reduce its additional work while retaining
+those successes. If fewer than 13/20, inspect the
+individual candidate lists and decode ordering,
+not only LL2 grid geometry.
+
+**Not yet addressed:** CryptoLeaf screenshot
+at either scale and Aarne at 50% have no
+corresponding LL2 grid hits in the measured
+candidate lists; a new synchronization estimator
+may be necessary. No production change should
+follow until measured blind recovery, latency and
+image quality justify it.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
