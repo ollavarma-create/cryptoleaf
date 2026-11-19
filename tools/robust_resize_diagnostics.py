@@ -108,7 +108,10 @@ def inspect_file(path: Path, packet: bytes, scale: float) -> dict:
         oracle = "PASS" if decoded == packet_payload(packet) else "FAIL:payload_mismatch"
     except ValueError as exc:
         oracle = "FAIL:" + str(exc)
-    repair = probe_one_bit_length_repair(down, original.size, packet_payload(packet))
+    repair = (
+        "NOT_NEEDED" if oracle == "PASS"
+        else probe_one_bit_length_repair(down, original.size, packet_payload(packet))
+    )
     return {
         "file": path.name,
         "original_size": f"{original.width}x{original.height}",
