@@ -51,7 +51,7 @@ from tools.robust_pilot_sweep import (
 
 DEFAULT_RANKED = 240
 WRONG_SEED_OFFSET = 1
-WRONG_DELTA_MULTIPLIER = 1.17
+WRONG_DELTA_MULTIPLIER = 1.5
 
 
 def frozen_candidates(
