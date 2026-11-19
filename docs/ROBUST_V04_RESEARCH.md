@@ -3937,6 +3937,126 @@ trade-off. Avoid choosing an
 unvalidated DELTA for production
 or modifying the encoder yet.
 
+### JPEG recovery gate at DELTA20: 19/36 blind, 20/36 oracle (fails robustness gate)
+
+User-supplied `robust-v04-qim-jpeg-d20-01.csv`:
+**72 rows** (six source covers ×
+resize .55/.68/.83 × JPEG 85/70
+4:2:0 × marked/unmarked).
+All 36 pairs match on original
+source SHA256, received size,
+scale, quality, strength and
+frozen search parameters.
+Compared against the matching
+`robust-v04-qim-jpeg-recompress-01.csv`
+at DELTA38, which achieved
+36/36 oracle and blind PASS
+and 0/36 control packets.
+
+| Resize | JPEG85 marked blind PASS | JPEG70 marked blind PASS | Marked oracle PASS (both qualities) |
+| --- | ---: | ---: | ---: |
+| .55 | 3/6 | 1/6 | 4/12 |
+| .68 | 4/6 | 3/6 | 7/12 |
+| .83 | 4/6 | 4/6 | 9/12 |
+| **All** | **11/18** | **8/18** | **20/36** |
+
+**Marked:** 19/36 actual
+`decode_status=PASS`, each in
+exactly **one** decoder attempt.
+**17/36 blind failures**, of which
+**16** also have
+`oracle=FAIL:ValueError` at the
+known original size. Thus
+16 failures are not fixable by
+search ranking alone under the
+current decoder/packet parameters.
+One case (a photograph at .83,
+JPEG85) has **oracle PASS** but
+blind failure because the true
+LL2 grid ranks **70th**, outside
+`top_grids=5`. The true grid
+ranked first in **29/36**, was
+shortlisted in **31/36**, and the
+exact original size ranked first
+in **29/36**. The true size
+had a refined rank for 31/36
+cases (not shortlisted in five).
+No conclusion about failure
+subtypes inside `ValueError`
+can be drawn without instrumenting
+decoder error codes.
+
+**Controls:** 36/36
+`NO_VALID_PACKET`,
+`any_valid_packet=False`,
+**1,159** decoder attempts total.
+No observed false packet; this
+does not prove zero false-positive
+probability.
+
+**Source dependence:** one
+photograph 6/6 blind PASS; another
+photograph 0/6; the screenshot
+0/6; other three covers 4/6,
+4/6 and 5/6. JPEG85 succeeds
+11/18 and JPEG70 8/18. The
+coarse correct-grid correlation
+mean fell from **.650872**
+(DELTA38) to **.382074**
+(DELTA20), a mean paired
+reduction of **.268798**.
+The minimum marked correct-grid
+score at DELTA20 is
+**−.000145**, while maximum
+unmarked coarse score is
+**.176106**; unlike DELTA38,
+there is no global score
+separation in this set.
+The refined exact-size mean
+at DELTA20 (31 shortlisted)
+is **.648562**, vs
+**.901312** for all 36
+DELTA38 cases; different
+sample counts preclude a
+fully matched 36-row mean
+comparison. Marked total
+time ~**378.567 s**
+(**10.516 s/case**), with
+coarse search **314.508 s**;
+unmarked total ~**384.190 s**
+(**10.672 s/case**).
+Timing is not controlled
+performance benchmarking.
+
+**Decision:** DELTA20
+was the visually best setting
+in the prior ablation, with
+improved local SSIM, but
+**fails the frozen JPEG
+robustness gate** (19/36 vs
+36/36 at DELTA38). Do not
+change production defaults.
+The next predeclared candidate
+is **DELTA26**, same six
+covers, same pipeline and
+frozen parameters, including
+36 paired unmarked controls.
+Compare oracle and blind
+recovery and local fidelity.
+If DELTA26 still falls short,
+test DELTA32; if all lower
+deltas degrade robustness,
+explore distortion-aware LL2
+coefficient selection/encoding
+rather than relying only on
+a global quantization step.
+Any new scheme needs separate
+format compatibility planning
+and genuinely new holdout covers.
+Do not tune parameters to
+individual failures in these
+development images.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
