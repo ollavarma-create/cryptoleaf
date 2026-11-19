@@ -1046,6 +1046,108 @@ nonzero correlations due to cover structure and
 DWT modifications; do not interpret a high raw
 score as pilot proof without comparing controls.
 
+### Top-K Fourier peak results: a budget-allocation problem
+
+The user supplied `robust-v04-pilot-topk-01.csv`:
+five covers × pilot strengths **0, .12, .18** ×
+75%/50% × 4/8/12 correlation peaks = **90 rows**,
+all `oracle=PASS` and `status=OK`. There are
+**30 distinct received-image cases**, repeated across
+three peak budgets; **20** have a nonzero pilot.
+This experiment ranks candidate LL2 geometries and
+does **not** perform actual blind packet decoding.
+
+Same-LL2-grid coverage among 160 total Fourier candidates
+for the 20 nonzero-pilot cases:
+
+| Selected peaks | 75% (10) | 50% (10) | Total (20) |
+| --- | ---: | ---: | ---: |
+| 4 (current research baseline) | 6 | 4 | **10** |
+| 8 | 6 | 5 | **11** |
+| 12 | 5 | 4 | **9** |
+
+**New possible recovery:** Anna Maria 50%, pilot .18
+has no LL2 match with four peaks, but has a match at
+safe candidate **4** with eight and twelve peaks. Its
+true-scale local correlation peak ranks **6**. This
+is a candidate-grid hit only, **not a demonstrated
+blind decode**.
+
+**Budget dilution:** with twelve peaks, Anna Maria
+75% pilot .12 loses its previous grid hit (safe
+rank 72 at four peaks, 85 at eight), and AppFootprint
+50% pilot .12 also loses its hit (90 at four peaks,
+126 at eight). AppFootprint 50% pilot .18 moves from
+safe rank **88** (four peaks) to **124** (eight)
+and **160** (twelve). More peaks are not monotonic
+under the unchanged 160-candidate cap and Priority50
+allocation.
+
+**Zero-pilot negative control:** P1000450 at 50%,
+pilot=0, gains an *exact-size and LL2-grid hit* at
+candidate **61** with twelve peaks, even though
+no Fourier pilot was embedded. This is not a blind
+payload recovery, but demonstrates that an apparently
+correct size can be ranked from cover-content
+correlations alone. Compare real pilot against
+the zero control rather than treating high correlation
+as pilot evidence.
+
+**Hard covers and local peak ranks:** at 75% Aarne's
+true-scale local peak ranks **15** (pilot .12) and
+**14** (.18), outside all tested top-K budgets;
+at 50% the ranks are **22** for both strengths.
+CryptoLeaf screenshot at 75% ranks **29** (.12)
+and **17** (.18); at 50% it has **no local
+correlation maximum within ±.01 scale units**
+for either strength. Simply increasing top-K
+is therefore not a general solution, even before
+accounting for budget dilution.
+
+**Next experiment: first-peak quota vs peak count.**
+The research-only helper
+`priority_candidates_from_peaks` now accepts
+`first_peak_quota` (default **50**, unchanged
+behavior). The spectral ablation tool accepts
+`--first-peak-quotas` and reports the number of
+**distinct safe LL2 grids** in the candidate list.
+All variants use the same fixed 160-candidate budget.
+The exact original dimensions remain oracle/metrics
+only; they are never supplied to candidate generation.
+
+```bash
+git pull --ff-only
+python -m pytest \
+  tests/test_robust_blind_sync_probe.py \
+  tests/test_robust_pilot_spectral_ablation.py -q
+
+python tools/robust_pilot_spectral_ablation.py \
+  /home/jari/Pictures/0-4-mosaic-in \
+  --variants all38 \
+  --pilot-strengths 0,0.12,0.18 \
+  --scales 0.75,0.5 \
+  --peak-counts 4,8,16,24 \
+  --first-peak-quotas 0,10,25,50 \
+  --csv results/robust-v04-pilot-quota-01.csv
+```
+
+Expected **480 rows** (5 covers × 3 strengths ×
+2 scales × 4 peak budgets × 4 first-peak quotas).
+The four-peaks/50-quota slice is an exact reproduction
+control for the prior all38 baseline. Compare:
+(a) LL2 coverage across **nonzero-pilot** cases,
+(b) successful grid's safe attempt rank, (c) number
+of distinct LL2 grids searched, (d) zero-pilot
+false-size hits, and (e) whether the 14th/15th
+Aarne peak ever receives a viable candidate.
+
+If no candidate-allocation setting improves the hard
+covers, pivot to a more discriminative synchronization
+signal or a scale-estimation method that does not rely
+on the strongest raw Fourier peaks. If a setting
+improves grid coverage, validate its **actual blind
+payload recovery** before any production change.
+
 ## Fair comparison rules
 
 1. Freeze the original image, preprocessing dimensions, payload bytes and output format.
