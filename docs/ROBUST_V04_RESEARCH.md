@@ -4148,3 +4148,29 @@ Hypothesis: interpolation phase changes LL2 coefficients and voting margins, so 
 5. Before adoption, evaluate **additional unseen images** (UI and natural), capacity and time, and report recovery denominators and negative-control results. Crops, rotation and aspect-ratio distortion are separate future gates, not covered by these JPEG/resize tests. A new coefficient order/basis needs an explicit versioning and compatibility plan for existing v0.3/CLR1 images.
 
 **Primary acceptance criterion:** actual normal-view images are not spoiled by recognizable blocks or halos **and** exact-packet recovery is at least competitive with the predeclared Haar baseline under identical transformations. Failing either condition means research-only, even if a numerical metric improves.
+
+## 2026-11-20 H-A execution checkpoint — stage 1 prepared, results pending
+
+The next controlled experiment is the predeclared **H-A Haar vs db2 vs bior2.2** basis comparison. A research-only stage-1 script, unit tests and instructions were prepared as a downloadable local test package; **they are not yet committed to this branch** and have not been run in the user's CryptoLeaf environment. Do not infer a PASS from their preparation.
+
+Planned script paths after extracting the package into the repository root:
+
+- `tools/robust_wavelet_basis_probe.py`: independent, basis-matched level-2 QIM embedding and oracle-size decoding; the Haar implementation should match `robust._feedback_embed` pixel-for-pixel.
+- `tests/test_robust_wavelet_basis_probe.py`: regression for Haar parity and pixel identity, PNG round trips on all three bases, negative control and capacity checks.
+- `docs/ROBUST_WAVELET_HA_TEST.md`: detailed method, controls, quality measures and visual stop/go rules.
+
+Proposed first run with **two development covers**, unchanged fixed packet, `DELTA=38`, `REPEAT=13`, `periodization`, level 2, **pilot=0** to isolate the data carrier:
+
+```bash
+python -m pytest tests/test_robust_wavelet_basis_probe.py -q
+python tools/robust_wavelet_basis_probe.py \
+  /path/to/Screenshot_20261120_110855.png \
+  /path/to/DSCN0032.JPG \
+  --out results/wavelet-ha-01
+```
+
+Record normal-view (100%, unamplified) visual verdict **for each basis on each cover**; report block/halo/flat-area artifacts, PNG exact payload, LL2 capacity and QIM repetition errors, SSIM p01, 4-pixel boundary gradient and flat-region luma distortion. A common numerical DELTA is only a diagnostic; it does not equate basis-dependent spatial distortion or JPEG robustness.
+
+**Stage-1 exit:** if neither smoother basis is clearly less intrusive on *both* image types, reject simple wavelet substitution before spending time on the expensive JPEG matrix. If a candidate passes human visual screening and PNG recovery, build the separately instrumented **basis-aware** 0.55/0.68/0.83 Lanczos × JPEG85/70 4:2:0 oracle+blind+unmarked gate. Existing blind LL2-grid scorer and `robust.decode_at_size` are Haar-specific; do not reuse them unchanged for db2/bior. Freeze settings and compare at *matched observed recovery*, then use genuinely unseen covers before any integration. No changes to production `src/robust_image.py` or CLR1 wire format are authorized by this stage.
+
+**Reproducibility note:** this checkpoint records the plan and filenames, **not experimental outcomes**. After local tests, commit the actual research script/tests and attach the CSV/visual verdict to this document, or explicitly note why the run was abandoned.
