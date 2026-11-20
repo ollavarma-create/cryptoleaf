@@ -4314,3 +4314,21 @@ remain fixed. Full procedure: `docs/ROBUST_CONTENT_AWARE_HB22.md`.
 The warning-only fallback remains open if no visually acceptable,
 reliably decodable placement is found. No blind/social-media claims
 or production changes follow from this exploratory experiment.
+
+
+## H-B2.3 — Capacity-aware texture placement / refusal experiment
+
+H-B2.2 demonstrated a capacity failure on the sparse technical
+drawing `mitat.jpg`, even though texture placement was often visually
+better on detailed images. H-B2.3 tests strict saturation-safe,
+texture-thresholded placement versus explicit capacity-preserving
+fallback at local 4x4 luminance std thresholds 0, 2, 5 and 10.
+It re-embeds the same fixed packet using H-B1.5 inward and evaluates
+actual oracle-map decoding and quality on the same nine images.
+Strict insufficient capacity is reported as SKIP, a candidate
+pre-embed warning. This is an exploratory threshold sweep, **not**
+a validated perceptual risk predictor. See
+`docs/ROBUST_CONTENT_AWARE_HB23.md`.
+
+No production changes, blind-decoding claims, or social-media
+robustness claims.
