@@ -4369,3 +4369,31 @@ bootstrap/header could identify method and parameters, but would
 not by itself solve map synchronization. Investigate stable
 content-derived maps or a protected map channel separately before
 claiming blind or social-media decoding. No production changes.
+
+
+## H-B2.5 pilot results and H-B2.6 handover (2026-11-20)
+
+Three-cover H-B2.5 pilot: `teksti.png`, `kallio.JPG`,
+`kontrastit.png`; 4 arms (uncapped texture, cap factors
+1.5/2/3), 9 channels each, 108 source/arm/channel observations.
+All four arms had **19/27 PASS**: per cover 5/9, 7/9, 7/9.
+No per-channel binary outcome changed, though each arm produced
+a distinct marked PNG on each cover. The cap reduced per-tile
+concentration but generally reduced SSIM-Y, especially for
+`teksti.png` (baseline 0.998014; cap 1.5 0.988725).
+Local worst-tile error was mixed. No universal improvement
+established; images, not channel rows, are the independent
+cover samples. Full figures and provenance:
+`docs/ROBUST_CONTENT_AWARE_HB25.md`.
+
+**Next experiment H-B2.6:** test receiver-side reconstruction
+of the **ordered** coefficient placement map using marked,
+JPEG-processed and resized images, with no original-cover
+oracle access. Quantify map overlap and ordered agreement
+separately from bit recovery. A protected bootstrap header
+could signal strategy/parameters, but cannot by itself
+recover an unstable texture-derived map. Consider
+image-independent deterministic mapping and/or explicitly
+signaled recoverable map data as separate hypotheses.
+Maintain production codec unchanged; do not claim blind
+extraction or social-media robustness until demonstrated.
