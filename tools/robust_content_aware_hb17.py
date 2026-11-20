@@ -68,11 +68,11 @@ def aggregate(rows, field, values=None):
                 "error_fraction": rate(group, "received_wrong"),
                 "flip_fraction": rate(group, "channel_flip"),
                 "median_drift": round(float(np.median(
-                    [r["abs_ll2_drift"] for r in group])), 5),
+                    [float(r["abs_ll2_drift"]) for r in group])), 5),
                 "median_png_margin": round(float(np.median(
-                    [r["png_lattice_margin"] for r in group])), 5),
+                    [float(r["png_lattice_margin"]) for r in group])), 5),
                 "median_cover_std": round(float(np.median(
-                    [r["cover_std"] for r in group])), 5),
+                    [float(r["cover_std"]) for r in group])), 5),
             })
     return out
 
