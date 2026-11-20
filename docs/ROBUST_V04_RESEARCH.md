@@ -4347,3 +4347,25 @@ should remain an explicit capacity SKIP, not be forced into
 visually risky placement. See `docs/ROBUST_CONTENT_AWARE_HB24.md`.
 All outcomes are original-cover oracle experiments, not blind
 or social-media resilience validation.
+
+
+## H-B2.5 — Texture-first capped placement and decoder design constraint
+
+H-B2.4 found that forced spatial round-robin dispersion can improve
+specific decoding channels while reducing SSIM. H-B2.5 tests a
+weaker intervention: select highest-texture safe positions first,
+but cap the number of positions per 16x16 LL2 tile at
+1.5x, 2x or 3x the uniform active-tile mean. Compare with the
+uncapped texture baseline using the same fixed packet and channel
+suite, with actual inward re-embedding and oracle decoding.
+If the cap or texture eligibility prevents full packet placement,
+report SKIP rather than forcing unsafe positions.
+See `docs/ROBUST_CONTENT_AWARE_HB25.md`.
+
+**Architectural constraint:** image-adaptive placement requires more
+than a decoder-side strategy identifier. The decoder must reconstruct
+the same ordered coefficient map after image processing. A future
+bootstrap/header could identify method and parameters, but would
+not by itself solve map synchronization. Investigate stable
+content-derived maps or a protected map channel separately before
+claiming blind or social-media decoding. No production changes.
