@@ -53,7 +53,7 @@ def run_one(source, maps_dir, hb15_dir, packet, delta, repeat):
         positions = np.load(maps_dir / (stem + "-positions.npy"), allow_pickle=False)
         if (positions.shape != expected.shape or
             not np.issubdtype(positions.dtype, np.integer) or
-            np.any(positions < 0) or np.any(positions >= len(cover["std"])) or
+            np.any(positions < 0) or np.any(positions >= len(cover["cover_std"])) or
             np.unique(positions).size != len(positions)):
             raise ValueError("Invalid oracle map: " + stem)
         path = hb15_dir / (stem + "-inward.png")
@@ -79,7 +79,7 @@ def run_one(source, maps_dir, hb15_dir, packet, delta, repeat):
                 "p90_abs_ll2_drift": round(float(np.percentile(drift, 90)), 5),
                 **result,
             })
-            std = cover["std"][positions]
+            std = cover["cover_std"][positions]
             for i, index in enumerate(positions):
                 positions_rows.append({
                     "source": source.name, "strategy": strategy, "scale": scale,
