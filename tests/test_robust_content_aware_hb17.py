@@ -41,3 +41,19 @@ def test_conditioning_keeps_all_rows():
     grouped = conditioned(rows)
     assert sum(r["n"] for r in grouped if r["feature"] == "dwt_phase") == 32
     assert sum(r["n"] for r in grouped if r["feature"] == "jpeg_block_crossing") == 32
+
+
+def test_aggregate_accepts_csv_string_numbers():
+    # csv.DictReader returns strings even for numeric fields.
+    rows = [
+        {"source": "a", "strategy": "balanced", "transform": "resize083_jpeg85",
+         "dwt_phase": "00", "received_wrong": "0", "channel_flip": "0",
+         "abs_ll2_drift": "1.0", "png_lattice_margin": "12.0", "cover_std": "2.0"},
+        {"source": "a", "strategy": "balanced", "transform": "resize083_jpeg85",
+         "dwt_phase": "00", "received_wrong": "1", "channel_flip": "1",
+         "abs_ll2_drift": "3.0", "png_lattice_margin": "14.0", "cover_std": "4.0"},
+    ]
+    result = aggregate(rows, "dwt_phase")
+    assert result[0]["median_drift"] == 2.0
+    assert result[0]["median_png_margin"] == 13.0
+    assert result[0]["median_cover_std"] == 3.0
