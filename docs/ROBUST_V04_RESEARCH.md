@@ -4296,3 +4296,21 @@ on measured risk/visual diagnostics and further image diversity.
 Do not assume all screenshots are risky or that all photographs
 are safe. Avoid promising social-media resilience. Preserve
 the option of a separate embedding method if H-B2 fails.
+
+
+## H-B2.2 — Broader-cover replication before adaptive placement
+
+H-B2.1 suggested that texture placement may admit an original-cover
+error-risk ranking, but only two images were studied. H-B2.2
+(`tools/robust_content_aware_hb22.py`) performs **fresh** fixed-packet
+inward embedding on a user-supplied 6–10 image set, comparing random,
+texture and balanced with the original oracle maps. It measures
+full-reference quality, placement overlays, PNG recovery, JPEG-only,
+resize-only and combined resize+JPEG channels. This separates actual
+visibility from the colored map overlay and tests whether the earlier
+image-type differences persist. DELTA=38, REPEAT=13, Haar LL2, pilot=0
+remain fixed. Full procedure: `docs/ROBUST_CONTENT_AWARE_HB22.md`.
+
+The warning-only fallback remains open if no visually acceptable,
+reliably decodable placement is found. No blind/social-media claims
+or production changes follow from this exploratory experiment.
