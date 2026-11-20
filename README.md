@@ -4,6 +4,8 @@
 
 **Status:** experimental alpha. [v0.3.0a1](https://github.com/ollavarma-create/cryptoleaf/releases/tag/v0.3.0a1) is published with a Windows build; the Linux AppImage has passed CI and manual Fedora testing, and is available as a development artifact until it is attached to a release. Neither build should be considered independently security-audited. The older v0.2.1 release predates the robust image and batch features described below.
 
+**Version 0.4** research is now on hold. Read [blog](https://ollavarma-create.github.io/blog/en/posts/cryptoleaf-kehitys/)
+
 Cryptoleaf hides short messages in images or audio. Some modes support password-based encryption. **Steganography is not a guarantee of secrecy or undetectability**, and a successful save does not guarantee survival of subsequent editing, recompression, or resizing.
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
