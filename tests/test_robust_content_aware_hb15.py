@@ -9,7 +9,7 @@ from tools.robust_dwt_parameter_sweep import codec_parameters
 
 def test_modes_and_input_validation():
     assert ARMS == ("baseline", "inward", "outward", "adaptive")
-    carrier = Image.new("RGB", (128, 128), (127, 127, 127))
+    carrier = Image.new("RGB", (256, 256), (127, 127, 127))
     packet = pack(b"x")
     positions = select_positions(carrier, len(packet) * 8 * 13, "random")
     with codec_parameters(38, 13):
