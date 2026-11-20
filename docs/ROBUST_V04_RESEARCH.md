@@ -4332,3 +4332,18 @@ a validated perceptual risk predictor. See
 
 No production changes, blind-decoding claims, or social-media
 robustness claims.
+
+
+## H-B2.4 — Spatial dispersion hypothesis
+
+Following H-B2.3, test whether top-texture placement is overly
+spatially concentrated. H-B2.4 (`tools/robust_content_aware_hb24.py`)
+compares strict highest-texture placement against deterministic
+round-robin selection across 8x8, 16x16 and 32x32 LL2-coefficient
+tiles. Each arm embeds the same fixed packet with inward feedback
+and evaluates actual decoding under H-B2.2 channels plus quality
+and tile occupancy. No saturation-unsafe fallback: `mitat.jpg`
+should remain an explicit capacity SKIP, not be forced into
+visually risky placement. See `docs/ROBUST_CONTENT_AWARE_HB24.md`.
+All outcomes are original-cover oracle experiments, not blind
+or social-media resilience validation.
