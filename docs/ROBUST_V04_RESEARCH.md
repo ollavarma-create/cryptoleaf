@@ -4074,3 +4074,77 @@ development images.
 3. Build a controlled parameter sweep of DELTA, REPEAT, feedback and pilot strength with identical packet bytes, capacity checks and explicit decode outcomes.
 4. Choose a reproducible image-level adaptation policy and a backward-compatible decoder signaling strategy.
 5. Add a versioned mosaic transport layer above the image codec, including image-loss recovery tests.
+
+## 2026-11-20 checkpoint: perceptual QIM reshaping (visually rejected)
+
+**Status:** research-only post-embedding experiment, not a production codec or format change. Two new covers: Screenshot_20261120_110855.png (UI; encoded reference 1120 × 709 in the JPEG gate) and DSCN0032.JPG (natural photograph). Frozen experimental QIM parameters: DELTA=38, REPEAT=13. The reference codec uses Haar LL2, randomized repeated parity-QIM and an independently tested blind LL2-grid search.
+
+**Research question:** can post-QIM spatial redistribution reduce conspicuous 4×4 artifacts while preserving the information-bearing LL2 coefficients? Test groups were reference, pilot_only, qim_only, full, qim_ycc_control (extra RGB/YCbCr conversion control), and four candidate spatial redistributions: opt_s0p8_g0p5, opt_s0p8_g1, opt_s1p4_g0p5, opt_s1p4_g1.
+
+The local unit tests **passed 7/7 (0.70 s)**. The image probe produced 18 rows (nine for each cover), and all reported QIM-bearing versions passed exact-payload PNG recovery.
+
+| Cover | Candidate | Local SSIM-Y p01 | 4×4 boundary metric | PNG |
+| --- | --- | ---: | ---: | --- |
+| UI | qim_ycc_control | 0.760614 | 1.07444 | PASS |
+| UI | opt_s0p8_g1 | 0.771282 | **0.91812** | PASS |
+| UI | opt_s1p4_g1 | **0.784056** | 0.92352 | PASS |
+| Photograph | qim_ycc_control | 0.804460 | 1.04118 | PASS |
+| Photograph | opt_s0p8_g1 | 0.807445 | **0.89904** | PASS |
+| Photograph | opt_s1p4_g1 | **0.818283** | 0.93877 | PASS |
+
+Relative to the matched QIM+color-roundtrip control, the best boundary metric was about 14.5% lower on UI and 13.6% lower on the photograph, but the highest local SSIM p01 belonged to a different candidate.
+
+**Human visual verdict: FAIL.** Direct inspection of the real full-size PNGs revealed clearly recognizable blocks in every QIM-bearing image, including both covers; pilot_only was comparatively clean. The changes optimized surrogate measurements without making the image subjectively acceptable. This rejects the tested post-embedding redistribution family, not every conceivable Haar-based codec.
+
+### Paired resize/JPEG gate: measured CSV
+
+Source: user-run screenshot-jpeg-gate-01.csv (36 rows). Three marked variants × Lanczos scales 0.55/0.68/0.83 × JPEG quality 85/70, explicit 4:2:0; one unmarked control for each marked case; transform order **resize then JPEG**. 40 candidate blind-decode budget. These are research transformations, not an observed social-media provider pipeline.
+
+| Variant | PNG oracle | Resized JPEG oracle (true size) | Blind exact payload | Negative control valid packets |
+| --- | ---: | ---: | ---: | ---: |
+| qim_only.png | 6/6 | 5/6 | 6/6 | 0/6 |
+| opt_s0p8_g1.png | 6/6 | 5/6 | 6/6 | 0/6 |
+| opt_s1p4_g1.png | 6/6 | 5/6 | 5/6 | 0/6 |
+| **Total** | **18/18** | **15/18** | **17/18** | **0/18** |
+
+The 18 negative rows are *paired runs, not 18 distinct unmarked covers*, and zero observed false positives is not a population risk bound.
+
+**The hard case:** 0.55× Lanczos followed by JPEG70. All three variants FAIL when decoded at the actual encoded dimensions 1120 × 709. Baseline QIM and opt_s0p8_g1 nevertheless decode in blind search at **1120 × 710**; opt_s1p4_g1 fails within the 40-attempt budget. The correct LL2 grid coarse-ranked first in all 18 marked scenarios. A one-pixel alternative restored-size difference can therefore affect bit recovery. The exact failure stage inside ValueError was **not isolated**; no claim about the CLR1 header, RS8 exhaustion, or majority-bit faults is justified yet.
+
+**Decision:** do not integrate the tested pixel-redistribution optimizations. They do not pass visual quality, and the best-SSIM candidate also has a blind recovery regression on the hardest case. Preserve the images, SHA-bearing CSV, deterministic packet and parameters as a negative research result.
+
+**Mechanistic hypothesis, not proof:** two-level Haar LL2 induces 4×4 support; a mean-changing parity QIM can create locally structured luminance perturbations. White or low-texture regions cannot mask those changes well, while saturation/clipping may constrain pixel redistribution. The cleaner pilot_only control motivates studying the QIM payload carrier first, separately from Fourier sync.
+
+### Predeclared next experiments — no implementation or test results yet
+
+**H-A: a smoother transform basis improves visual appearance at comparable robustness.**
+
+Compare the existing two-level Haar LL2 against db2 and a selected biorthogonal wavelet (bior). Keep the source, preprocessed size, deterministic packet, pilot configuration, repetition, color pipeline and test transforms fixed. Use a matching encoder/decoder basis, with wavelet boundary-extension mode and real coefficient capacity documented. Different wavelets have different synthesis gain, overlap and coefficient counts: comparing numerically identical DELTA alone is *not* a fair visual-vs-robustness test. Begin with nominally matched DELTA for diagnostics, then compare visual quality at empirically matched payload recovery.
+
+- H-A1 (visible quality): blind randomized A/B at **100% zoom** on *both* new covers must find fewer intrusive blocks **without replacing them with visible ringing/halos**. Report flat-area artifact rate, 4×4 boundary metric, local SSIM p01 and high-percentile pixel changes, but human acceptability is the primary endpoint.
+- H-A2 (recoverability): PNG exact payload first; successful candidates then undergo identical 0.55/0.68/0.83 × JPEG85/70 4:2:0 and 40-attempt blind search, plus true-size oracle and matched unmarked controls. Record error subtype, candidate rank and decoded dimensions. An exploratory six-case test per cover is not a reliability guarantee.
+- H-A3 (capacity): count usable coefficients, replication footprint, clipping, runtime and edge-extension behavior. Reject a visually attractive basis that cannot encode the same payload within capacity.
+- **Falsify H-A** if smoother bases still make obvious artifacts, or all visible gains require a material loss of known-size or blind recovery compared to frozen Haar baseline. A higher SSIM alone does not count.
+
+**H-B: content-aware placement can avoid conspicuous embedding in flat/saturated regions.**
+
+Treat this as a *separate* experiment from wavelet substitution; start with Haar so the effect is isolated.
+
+- H-B1 (oracle upper bound): derive a region map from the **original unmarked cover**, selecting robust textured/non-saturated regions. Hold the packet, repetition, quantizer and effective capacity fixed relative to a random-location control. Supply this original map explicitly to the decoder. Measure visual improvement, region occupancy, PNG/oracle JPEG recovery. Label the result **oracle-map only**, not blind success.
+- H-B2 (genuine blind map): after geometric resynchronization, derive the map again **from the received resized/JPEG image**, with no access to original coordinates/maps or expected payload. Measure map Jaccard overlap, exact ordered-index agreement, capacity and end-to-end CRC-verified decode; test 1–2 pixel reconstructed-size variation.
+- H-B3 (side information): if a stable receiver map cannot be regenerated, account for a bootstrap/index-map cost in bits, embedding visibility and error correction. Any side information must itself survive JPEG/resize. Do not quietly fall back to filling forbidden flat regions when capacity is insufficient.
+- **Falsify H-B as a blind robust design** if the independently regenerated locations disagree enough to lose packet alignment, even where an oracle-map experiment looks excellent. Explicit SKIP for insufficient capacity.
+
+**H-C: investigate nearby-size decode anomaly (diagnostic hypothesis).**
+
+Hypothesis: interpolation phase changes LL2 coefficients and voting margins, so the correct encoded size may fail while a nearby decoded size succeeds. On the *identical received 0.55× + JPEG70 bytes*, probe a bounded ±1–2-pixel size neighborhood around 1120 × 709 and record repetition errors, majority-bit errors, CLR1 header bits, RS8 codeword-byte errors, CRC outcome and grid ranks. Keep this separate from blind candidate selection: do not use oracle size or known payload to score candidate locations. A successful nearby size demonstrates empirical resampling tolerance, not geometric invariance.
+
+### Go/no-go and experiment order
+
+1. Freeze the baseline and record **FAIL (human visibility)** for reshaped candidates. Preserve both original covers and their output hashes; do not retune this development set for a prettier metric.
+2. **H-A first:** research-only Haar/db2/bior ablation, both covers, no-pilot QIM-only control, matched encoding/decoding and visual assessment; only then run resize/JPEG with negative controls. Do not alter the production wire format.
+3. **H-B separately:** matched random placement versus original-image oracle map, then attempt independently reconstructed receiver map. An oracle map cannot pass the blind gate.
+4. Investigate H-C if the failure mechanism materially affects a candidate's assessment.
+5. Before adoption, evaluate **additional unseen images** (UI and natural), capacity and time, and report recovery denominators and negative-control results. Crops, rotation and aspect-ratio distortion are separate future gates, not covered by these JPEG/resize tests. A new coefficient order/basis needs an explicit versioning and compatibility plan for existing v0.3/CLR1 images.
+
+**Primary acceptance criterion:** actual normal-view images are not spoiled by recognizable blocks or halos **and** exact-packet recovery is at least competitive with the predeclared Haar baseline under identical transformations. Failing either condition means research-only, even if a numerical metric improves.
