@@ -4246,7 +4246,7 @@ The per-repetition parity errors are **individual repeated-position errors, not 
 | Photo | db2 | 0 | **10** | 0 | 0 | **3.09322** |
 | Photo | bior2.2 | 6 | 269 | 0 | 0 | -6.17262 |
 
-All four `qim_header_bit_errors` on the **marked** rows? **No**: all twelve marked rows report **zero header bit errors**. The only nonzero `qim_majority_bit_errors` and `qim_codeword_byte_errors` are **4 and 4** respectively for the UI / bior2.2 / 0.68× JPEG70 case. The RS8 stage successfully repaired that case and recovered the exact payload. Assuming the existing RS8 configuration can correct up to four unknown erroneous codeword bytes, this particular test reached its nominal correction limit; an additional unknown byte error in the same protected codeword could defeat the current decoder. Do not infer a guaranteed failure probability from this single sample. The CSV does not prove the remaining robustness under other transforms or pixel-size guesses.
+All twelve marked rows report **zero CLR1 header bit errors**. The only nonzero `qim_majority_bit_errors` and `qim_codeword_byte_errors` are **4 and 4** respectively for the UI / bior2.2 / 0.68× JPEG70 case. The RS8 stage successfully repaired that case and recovered the exact payload. Assuming the existing RS8 configuration can correct up to four unknown erroneous codeword bytes, this particular test reached its nominal correction limit; an additional unknown byte error in the same protected codeword could defeat the current decoder. Do not infer a guaranteed failure probability from this single sample. The CSV does not prove the remaining robustness under other transforms or pixel-size guesses.
 
 ### Interpretation and decision
 
