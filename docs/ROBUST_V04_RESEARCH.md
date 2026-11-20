@@ -4219,3 +4219,41 @@ python tools/robust_wavelet_ha_oracle_gate.py \
 ```
 
 Outputs: `results/wavelet-ha-oracle-01/oracle_gate.csv`, `summary.json`, `settings.json`. **Decision deferred until measured results:** if smoother bases repeatedly lose recovery where Haar succeeds, reject simple wavelet substitution at fixed strength; if they match Haar, this only warrants further research, since visible artifacts remain and neither blind synchronization nor real social-media transforms have been validated. Do not increase DELTA opportunistically or claim a population false-positive bound from these paired controls.
+
+## 2026-11-20 H-A stage 2 — measured oracle JPEG results
+
+**Status: completed, 12/12 marked oracle-size JPEG payloads recovered; 0/12 paired unmarked controls produced a valid packet.** This measured section supersedes the earlier stage-2 "awaiting local run" checkpoint. Evidence: user-supplied `oracle_gate.csv` (24 rows, 31 columns). The separate `summary.json` was not supplied; all statements here are derived from the CSV. No basis-aware blind-size search was run.
+
+The frozen predeclared conditions were **two covers** (UI `Screenshot_20261120_110855.png`, 1120×709; photo `DSCN0032.JPG`, 1280×960), **three bases** (Haar, db2, bior2.2), **DELTA=38**, **REPEAT=13**, **pilot=0**, and exactly two transforms: **Lanczos 0.83 → JPEG85 4:2:0** and **Lanczos 0.68 → JPEG70 4:2:0**. Every marked row reports `stage1_png_oracle=PASS`, `oracle_status=PASS`, `valid_packet=True`, `exact_payload=True`. Every unmarked row reports `oracle_status=NO_PACKET`, `valid_packet=False`, `exact_payload=False` and `Invalid CLR1 header`. The negative-control count is *paired trials*, not 12 statistically independent covers.
+
+| Basis | UI: 0.83 / Q85 | UI: 0.68 / Q70 | Photo: 0.83 / Q85 | Photo: 0.68 / Q70 | Total exact payload | Paired unmarked valid packet |
+|---|---|---|---|---|---:|---:|
+| Haar | PASS | PASS | PASS | PASS | **4/4** | **0/4** |
+| db2 | PASS | PASS | PASS | PASS | **4/4** | **0/4** |
+| bior2.2 | PASS | PASS | PASS | PASS | **4/4** | **0/4** |
+| **All** | | | | | **12/12** | **0/12** |
+
+### Instrumented decoder margins
+
+The per-repetition parity errors are **individual repeated-position errors, not message-bit errors**. `qim_majority_bit_errors` and `qim_codeword_byte_errors` are counted against the known original packet in this oracle diagnostic; they are not blind-receiver outputs.
+
+| Cover | Basis | 0.83 / JPEG85: repeat errors | 0.68 / JPEG70: repeat errors | 0.68 / JPEG70: majority-bit errors | 0.68 / JPEG70: pre-RS8 byte errors | 0.68 / JPEG70: QIM margin p01 |
+|---|---|---:|---:|---:|---:|---:|
+| UI | Haar | 563 | 795 | 0 | 0 | -16.50000 |
+| UI | db2 | 579 | 683 | 0 | 0 | -17.60356 |
+| UI | bior2.2 | 676 | **1011** | **4** | **4** | -17.57112 |
+| Photo | Haar | 2 | 68 | 0 | 0 | -0.42250 |
+| Photo | db2 | 0 | **10** | 0 | 0 | **3.09322** |
+| Photo | bior2.2 | 6 | 269 | 0 | 0 | -6.17262 |
+
+All four `qim_header_bit_errors` on the **marked** rows? **No**: all twelve marked rows report **zero header bit errors**. The only nonzero `qim_majority_bit_errors` and `qim_codeword_byte_errors` are **4 and 4** respectively for the UI / bior2.2 / 0.68× JPEG70 case. The RS8 stage successfully repaired that case and recovered the exact payload. Assuming the existing RS8 configuration can correct up to four unknown erroneous codeword bytes, this particular test reached its nominal correction limit; an additional unknown byte error in the same protected codeword could defeat the current decoder. Do not infer a guaranteed failure probability from this single sample. The CSV does not prove the remaining robustness under other transforms or pixel-size guesses.
+
+### Interpretation and decision
+
+1. **H-A2 is not falsified by this small JPEG gate.** All three bases recovered 4/4 exact payloads at known original dimensions. Smoother wavelets did **not** necessarily lose JPEG recovery at fixed DELTA=38 in these conditions. This is a useful correction to the preliminary concern from stage-1 PNG repetition errors.
+2. **Bior2.2 is more fragile on the hardest UI case**, even though its stage-1 perceptual scores were best: 1011 individual parity errors, four majority-bit errors and four pre-RS8 erroneous bytes, versus zero majority-bit and byte errors for Haar and db2. In the harder photo case db2 has the strongest repetition-error count (10), compared with Haar (68) and bior2.2 (269).
+3. **The visibility requirement is still NOT met.** The user's earlier full-size visual inspection found visible artifacts in both covers even with bior2.2. A perfect 12/12 oracle score does not reverse that verdict.
+4. **Blind sync, pilot interactions, real social-media recompression, crops, nonuniform scaling and unseen covers remain untested.** The gate is not a justification for replacing the production Haar carrier.
+
+**Recommended next decision:** do **not** spend time on a broad blind wavelet search while the visible-artifact requirement remains unmet. Move to **H-B** (content-aware/texture- and saturation-aware placement), initially as an *oracle region-map* ablation with a frozen Haar carrier and matched capacity, then explicitly test whether a decoder can independently regenerate the same coefficient ordering after JPEG/resizing. Keep bior2.2 as a visual-quality reference and db2 as a robustness-relevant comparator. If future H-B results are promising, revisit basis selection at **matched measured recovery** and add blind synchronization then. Preserve `oracle_gate.csv`, the exact images and the predeclared settings; no production codec or CLR1 format change was made.
+
