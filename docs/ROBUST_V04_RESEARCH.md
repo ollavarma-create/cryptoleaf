@@ -4174,3 +4174,27 @@ Record normal-view (100%, unamplified) visual verdict **for each basis on each c
 **Stage-1 exit:** if neither smoother basis is clearly less intrusive on *both* image types, reject simple wavelet substitution before spending time on the expensive JPEG matrix. If a candidate passes human visual screening and PNG recovery, build the separately instrumented **basis-aware** 0.55/0.68/0.83 Lanczos × JPEG85/70 4:2:0 oracle+blind+unmarked gate. Existing blind LL2-grid scorer and `robust.decode_at_size` are Haar-specific; do not reuse them unchanged for db2/bior. Freeze settings and compare at *matched observed recovery*, then use genuinely unseen covers before any integration. No changes to production `src/robust_image.py` or CLR1 wire format are authorized by this stage.
 
 **Reproducibility note:** this checkpoint records the plan and filenames, **not experimental outcomes**. After local tests, commit the actual research script/tests and attach the CSV/visual verdict to this document, or explicitly note why the run was abandoned.
+
+## 2026-11-20 H-A stage 1 — measured results (two local development covers)
+
+**Status: completed PNG/oracle and visual screen; JPEG/blind NOT tested.** This section supersedes the "results pending" state in the preceding execution checkpoint. The user ran the H-A research script locally and supplied `stage1.csv` plus full-size MirrorPilot reference/Haar/db2/bior2.2 screenshots. The user also inspected the nature-photo results and reported residual visibility there. Research script/tests are still local test-package artifacts, not yet committed to this branch. Raw CSV and original photos are not stored in the repository.
+
+**Frozen setup:** `haar`, `db2`, `bior2.2`; two-level `periodization`; `DELTA=38`, `REPEAT=13`, fixed CLR1/RS8 payload/seed; Fourier pilot strength **0**. Development covers: `Screenshot_20261120_110855.png` (1120×709) and `DSCN0032.JPG` (1280×960 after preprocessing). All six basis-matched, **known-size PNG** payload recoveries returned `PASS`. These are not blind decodes.
+
+| Cover | Basis | SSIM-Y | SSIM-Y p01 | 4px boundary/inside residual gradient | Flat luma MAE | QIM repeated-position parity errors | QIM margin p01 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| UI | Haar | 0.976259 | 0.785203 | 1.03103 / 0.06323 | 0.78993 | 33 | 0.00000 |
+| UI | db2 | 0.979549 | 0.805269 | 0.28059 / 0.48356 | 0.86036 | 193 | -10.58898 |
+| UI | bior2.2 | **0.991360** | **0.925040** | **0.26288 / 0.28171** | **0.70995** | 217 | -13.66787 |
+| Photo | Haar | 0.984115 | 0.803583 | 1.04911 / 0.37648 | 1.27334 | 0 | 13.25000 |
+| Photo | db2 | 0.985440 | 0.825658 | 0.52550 / 0.64407 | 1.28072 | 0 | 14.05645 |
+| Photo | bior2.2 | **0.993390** | **0.932823** | 0.49252 / 0.49851 | **1.17069** | 0 | 13.49963 |
+
+**Interpretation and limitations:**
+
+- Bior2.2 clearly improves numerical perceptual quality on **both** covers and removes much of Haar's periodic 4-pixel boundary signature. On the UI cover, boundary/inside gradient ratio falls from about **16.3** (Haar) to **0.93** (bior2.2). This does **not** mean the modified image is visually imperceptible: in the user's inspection, residual speckle/changes remain detectable in the UI and nature photo. The stage-1 visual acceptance criterion has **not** been met.
+- On the UI cover, bior2.2 has **217** wrong individual repeated QIM positions versus Haar's **33** (of **6032** embedded repeated positions). The 1st-percentile margin is negative for db2/bior2.2. The majority vote and RS8 still recover the PNG packet, but there is less evidence of margin for later JPEG/resizing. **Do not equate these individual parity errors with packet/byte errors or conclude a JPEG failure without testing.** The photo has zero repeated-position errors for all bases.
+- `SSIM-Y p01` and boundary metrics describe different distortions; neither substitutes for 100%-zoom human inspection. A nominally identical DELTA is not a basis-normalized spatial or robustness comparison. This is a tiny development sample, not statistical validation.
+- **Decision:** H-A's *relative visual improvement* is supported, but **simple wavelet replacement is not approved**: the artifacts remain visible and post-processing robustness is unmeasured. Do not run the expensive basis-aware blind-grid × JPEG matrix yet.
+
+**Proposed cheap falsification gate (optional, before further architectural work):** perform only a small, separately logged **basis-aware oracle-size** stress test on these two covers (e.g. resize 0.83 + JPEG85 and resize 0.68 + JPEG70, explicit 4:2:0) using each basis's matching decoder. Retain the frozen Haar arm and same packet. This is intended to determine whether bior2.2's improved visual quality comes with a large robustness loss; it is **not** a substitute for blind search, negative controls, or new-cover validation. If bior2.2 fails materially, return to the planned perceptual optimization/adaptive embedding rather than blindly increasing DELTA and repeating a large sweep. Preserve all failures and source hashes.
