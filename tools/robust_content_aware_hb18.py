@@ -87,6 +87,7 @@ def run_one(source: Path, maps_dir: Path, marked_dir: Path, packet: bytes,
         if marked.size != reference.size:
             raise ValueError("Dimension mismatch: " + stem)
         marked_hash = hashlib.sha256(marked_path.read_bytes()).hexdigest()
+        marked_ll = ll2_received(marked, marked.size)
         for pair, scale, quality in PAIRS:
             observed = {}
             for arm in ARMS:
@@ -115,7 +116,7 @@ def run_one(source: Path, maps_dir: Path, marked_dir: Path, packet: bytes,
                         "coefficient_index": int(index),
                         "wrong": int(wrong[i]),
                         "abs_ll2_drift": round(float(abs(
-                            ll[index] - ll2_received(marked, marked.size)[index])), 5),
+                            ll[index] - marked_ll[index])), 5),
                     })
                 print(source.name, strategy, pair, arm, d["status"],
                       "repetition_errors", d["repetition_errors"],
