@@ -4198,3 +4198,24 @@ Record normal-view (100%, unamplified) visual verdict **for each basis on each c
 - **Decision:** H-A's *relative visual improvement* is supported, but **simple wavelet replacement is not approved**: the artifacts remain visible and post-processing robustness is unmeasured. Do not run the expensive basis-aware blind-grid × JPEG matrix yet.
 
 **Proposed cheap falsification gate (optional, before further architectural work):** perform only a small, separately logged **basis-aware oracle-size** stress test on these two covers (e.g. resize 0.83 + JPEG85 and resize 0.68 + JPEG70, explicit 4:2:0) using each basis's matching decoder. Retain the frozen Haar arm and same packet. This is intended to determine whether bior2.2's improved visual quality comes with a large robustness loss; it is **not** a substitute for blind search, negative controls, or new-cover validation. If bior2.2 fails materially, return to the planned perceptual optimization/adaptive embedding rather than blindly increasing DELTA and repeating a large sweep. Preserve all failures and source hashes.
+
+## 2026-11-20 H-A stage 2 — minimal paired oracle JPEG gate prepared (awaiting local run)
+
+**No results yet.** Following the stage-1 evidence (all six PNGs decode; residual visible artifacts, especially on UI covers), a small, basis-matched *known-original-size* JPEG gate has been prepared as a separate local test package. It is **not** a production-codec change and the script/tests have **not** yet been committed to this branch.
+
+- Local research script: `tools/robust_wavelet_ha_oracle_gate.py`.
+- Local unit tests: `tests/test_robust_wavelet_ha_oracle_gate.py` (7/7 passed in a dependency-light local test environment; full CryptoLeaf/wavelet integration awaits the user's run).
+- Usage note: `docs/ROBUST_WAVELET_HA_ORACLE_GATE.md`.
+- Input: saved `results/wavelet-ha-01/stage1.csv` and its exact reference/marked PNG files; stage-1 image hashes, packet hashes, basis, DELTA=38, REPEAT=13 and pilot=0 are checked before processing. No re-embedding.
+- Predeclared paired transforms: **0.83× Lanczos → JPEG85 4:2:0**, **0.68× Lanczos → JPEG70 4:2:0**. Not a 2×2 matrix.
+- Design: 2 covers × 3 bases × 2 transforms = **12 marked known-size oracle** decodes, plus **12 paired unmarked controls** using the same matching basis and original encoded dimensions. CRC-valid *wrong* payloads are not counted as exact success; any CRC-valid unmarked payload is a false positive.
+- Instrumentation: repeated-position QIM parity errors, majority-bit errors, CLR1 header bit errors, pre-RS8 codeword-byte errors, margin p01, decode exceptions and input/JPEG SHA-256 hashes. These diagnostics explicitly know the original packet and size and are **not** blind-receiver features.
+
+```bash
+python -m pytest tests/test_robust_wavelet_ha_oracle_gate.py -q
+python tools/robust_wavelet_ha_oracle_gate.py \
+  --stage1 results/wavelet-ha-01/stage1.csv \
+  --out results/wavelet-ha-oracle-01
+```
+
+Outputs: `results/wavelet-ha-oracle-01/oracle_gate.csv`, `summary.json`, `settings.json`. **Decision deferred until measured results:** if smoother bases repeatedly lose recovery where Haar succeeds, reject simple wavelet substitution at fixed strength; if they match Haar, this only warrants further research, since visible artifacts remain and neither blind synchronization nor real social-media transforms have been validated. Do not increase DELTA opportunistically or claim a population false-positive bound from these paired controls.
