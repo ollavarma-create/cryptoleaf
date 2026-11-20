@@ -4257,3 +4257,42 @@ All twelve marked rows report **zero CLR1 header bit errors**. The only nonzero 
 
 **Recommended next decision:** do **not** spend time on a broad blind wavelet search while the visible-artifact requirement remains unmet. Move to **H-B** (content-aware/texture- and saturation-aware placement), initially as an *oracle region-map* ablation with a frozen Haar carrier and matched capacity, then explicitly test whether a decoder can independently regenerate the same coefficient ordering after JPEG/resizing. Keep bior2.2 as a visual-quality reference and db2 as a robustness-relevant comparator. If future H-B results are promising, revisit basis selection at **matched measured recovery** and add blind synchronization then. Preserve `oracle_gate.csv`, the exact images and the predeclared settings; no production codec or CLR1 format change was made.
 
+
+
+## H-B1.8 / H-B1.9 and H-B2.1 follow-up (2026-11-20)
+
+Research-only frozen H-B1.5 inward carriers, Haar LL2, DELTA=38,
+REPEAT=13, pilot off, original-cover oracle maps and known original
+dimensions. No production codec change.
+
+H-B1.8 separated native-resolution JPEG from Lanczos down/upscaling
+with a paired 2x2 factorial design. The UI screenshot's balanced
+placement was much more vulnerable to resize-only than JPEG-only:
+at 0.83/JPEG85, 2,124 versus 409 repeated parity errors; combined
+2,229. The texture placement also failed resize-only while JPEG-only
+passed. Natural-photo cases passed packet decoding. These are
+observations on two images, not a generalized social-media claim.
+See `docs/ROBUST_CONTENT_AWARE_HB18.md`.
+
+H-B1.9 swept JPEG-free down/up Lanczos scaling 1.00 to 0.60.
+For the screenshot, balanced failed already at 0.95, texture at
+0.90, while random passed throughout the sweep. The natural photo
+passed throughout. Resize sensitivity is image-content-dependent;
+the oracle upscaling step is part of the measured channel.
+See `docs/ROBUST_CONTENT_AWARE_HB19.md`.
+
+**Next hypothesis H-B2.1:** assess whether original-cover local
+features predict position-level resize parity errors on a held-out
+image. Train per strategy and scale on one source, evaluate on the
+other (both directions). AUC and lowest-risk 20% error fractions
+are *observational diagnostics*; they do not constitute a new
+placement algorithm or packet recovery result. The new script
+`tools/robust_content_aware_hb21.py` reads H-B1.9 results and
+original sources; see `docs/ROBUST_CONTENT_AWARE_HB21.md`.
+
+**Product fallback if no robust and visually clean placement emerges:**
+consider a pre-embed warning for high-risk cover structure, based
+on measured risk/visual diagnostics and further image diversity.
+Do not assume all screenshots are risky or that all photographs
+are safe. Avoid promising social-media resilience. Preserve
+the option of a separate embedding method if H-B2 fails.
