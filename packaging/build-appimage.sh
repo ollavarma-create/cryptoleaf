@@ -8,7 +8,6 @@ cd "$ROOT"
 
 APPDIR="$ROOT/build/Cryptoleaf.AppDir"
 OUTPUT="$ROOT/dist/Cryptoleaf-v0.3-dev-x86_64.AppImage"
-TOOL="$ROOT/build/appimagetool-x86_64.AppImage"
 PYTHON="${PYTHON:-python}"
 
 "$PYTHON" -m nuitka \
@@ -51,13 +50,30 @@ cp "$ROOT/packaging/cryptoleaf.appdata.xml" "$APPDIR/usr/share/metainfo/cryptole
 cp "$ROOT/assets/icon.png" "$APPDIR/cryptoleaf.png"
 cp "$ROOT/assets/icon.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/cryptoleaf.png"
 
-# Extraction mode avoids requiring FUSE on GitHub-hosted runners.
-if [[ ! -s "$TOOL" ]]; then
-  curl -fL --retry 3 --output "$TOOL" \
-    "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
-fi
+# Verified AppImage packaging tools; extraction mode avoids FUSE.
+TOOL_VERSION="1.9.1"
+TOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+RUNTIME_VERSION="20251108"
+RUNTIME_SHA256="2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
+
+TOOLS_DIR="$(mktemp -d)"
+trap 'rm -rf -- "$TOOLS_DIR"' EXIT
+TOOL="$TOOLS_DIR/appimagetool.AppImage"
+RUNTIME="$TOOLS_DIR/runtime-x86_64"
+
+curl --fail --location --retry 3 \
+  "https://github.com/AppImage/appimagetool/releases/download/${TOOL_VERSION}/appimagetool-x86_64.AppImage" \
+  -o "$TOOL"
+printf '%s  %s\n' "$TOOL_SHA256" "$TOOL" | sha256sum -c -
+
+curl --fail --location --retry 3 \
+  "https://github.com/AppImage/type2-runtime/releases/download/${RUNTIME_VERSION}/runtime-x86_64" \
+  -o "$RUNTIME"
+printf '%s  %s\n' "$RUNTIME_SHA256" "$RUNTIME" | sha256sum -c -
+
 chmod +x "$TOOL"
-ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" "$APPDIR" "$OUTPUT"
+ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" \
+  --runtime-file "$RUNTIME" "$APPDIR" "$OUTPUT"
 test -s "$OUTPUT"
 chmod +x "$OUTPUT"
 ( cd "$ROOT/dist" && sha256sum "$(basename "$OUTPUT")" > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt )
